@@ -19,6 +19,7 @@
     customBlockedHosts: [],
     customSelectors: [],
     removedNodes: new WeakSet(),
+    neutralizedNodes: new WeakSet(),
     processedNodes: new WeakSet(),
     observedEventKeys: new Set(),
     pendingRoots: new Set(),
@@ -220,6 +221,7 @@
     removed += removeOverlayCandidates(roots);
     if (state.pageType === "chapter") {
       removed += removeChapterJunk(roots);
+      removed += neutralizeChapterClickTraps(roots);
     }
     if (state.inspectionMode) {
       observePageUrls(roots);
@@ -406,6 +408,178 @@
     return removed;
   }
 
+  function neutralizeChapterClickTraps(roots) {
+    const rules = state.pageRules || {};
+    const candidates = collectElements(roots, Number(rules.maxOverlayScansPerPass || 120));
+    const readerRects = getReaderRects();
+    let neutralized = 0;
+
+    for (const node of candidates) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || state.neutralizedNodes.has(node)) {
+        continue;
+      }
+      if (isProtectedChapterNode(node) || isChapterOverlayAllowed(node)) {
+        continue;
+      }
+      if (!isPotentialClickSurface(node)) {
+        continue;
+      }
+
+      const style = getComputedStyle(node);
+      const rect = node.getBoundingClientRect();
+      if (!isSuspiciousChapterOverlay(node, style, rect, readerRects)) {
+        continue;
+      }
+
+      const href = getClickableUrl(node);
+      const host = heuristics.getUrlHostname(href, location.href);
+      const trigger = chapterJunkTrigger(href, trimText(node.textContent));
+      const reason = trigger
+        ? "junk_domain"
+        : node.tagName === "A" ? "large_anchor" : "overlay";
+
+      if (trigger || isNearlyInvisible(style, node) || node.tagName === "A") {
+        hideNode(node, "chapter-clicktrap:" + reason, chapterOverlayDetails(node, rect, host, reason, trigger));
+      } else {
+        disableClickSurface(node, reason, rect, host, trigger);
+      }
+      neutralized += 1;
+    }
+
+    return neutralized;
+  }
+
+  function isPotentialClickSurface(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (node.tagName === "A" && node.getAttribute("href")) {
+      return true;
+    }
+    if (node.hasAttribute("onclick") || node.getAttribute("role") === "button") {
+      return true;
+    }
+    const style = getComputedStyle(node);
+    return style.cursor === "pointer" || node.querySelector("a[href]");
+  }
+
+  function isSuspiciousChapterOverlay(node, style, rect, readerRects) {
+    if (!rect.width || !rect.height) {
+      return false;
+    }
+    if (style.pointerEvents === "none" || style.display === "none" || style.visibility === "hidden") {
+      return false;
+    }
+
+    const position = style.position;
+    const positionedOverlay = position === "fixed" || position === "absolute" || position === "sticky";
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    const highZ = Number.isFinite(zIndex) && zIndex >= 10;
+    const viewportCover = rect.width >= window.innerWidth * Number(state.pageRules.overlayMinViewportWidthRatio || 0.75)
+      && rect.height >= window.innerHeight * Number(state.pageRules.overlayMinViewportHeightRatio || 0.4);
+    const readerOverlap = overlapsReader(rect, readerRects, Number(state.pageRules.overlayMinReaderOverlapRatio || 0.2));
+    const largeAnchor = node.tagName === "A" && rect.width >= window.innerWidth * 0.65 && rect.height >= 160;
+    const offsite = isOffsiteClickable(node);
+
+    return (positionedOverlay && (highZ || viewportCover || readerOverlap) && (isNearlyInvisible(style, node) || offsite || largeAnchor))
+      || (largeAnchor && (offsite || readerOverlap));
+  }
+
+  function getReaderRects() {
+    const selectors = state.pageRules.readerSelectors || [];
+    const rects = [];
+    for (const selector of selectors) {
+      try {
+        for (const node of document.querySelectorAll(selector)) {
+          const rect = node.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            rects.push(rect);
+          }
+        }
+      } catch (error) {
+        debugLog("invalid-reader-selector", { selector });
+      }
+    }
+
+    if (!rects.length) {
+      for (const image of document.querySelectorAll("img")) {
+        const rect = image.getBoundingClientRect();
+        if (rect.width >= 200 && rect.height >= 200) {
+          rects.push(rect);
+          if (rects.length >= 12) {
+            break;
+          }
+        }
+      }
+    }
+    return rects;
+  }
+
+  function overlapsReader(rect, readerRects, minRatio) {
+    for (const readerRect of readerRects) {
+      const overlapWidth = Math.max(0, Math.min(rect.right, readerRect.right) - Math.max(rect.left, readerRect.left));
+      const overlapHeight = Math.max(0, Math.min(rect.bottom, readerRect.bottom) - Math.max(rect.top, readerRect.top));
+      const overlapArea = overlapWidth * overlapHeight;
+      const readerArea = Math.max(1, readerRect.width * readerRect.height);
+      if (overlapArea / readerArea >= minRatio) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function isNearlyInvisible(style, node) {
+    const opacity = Number.parseFloat(style.opacity);
+    const transparentOpacity = Number.isFinite(opacity) && opacity <= Number(state.pageRules.overlayNearTransparentOpacity || 0.15);
+    const noText = trimText(node.textContent).length <= 4;
+    const transparentBg = /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*0\s*\)|transparent/i.test(style.backgroundColor || "");
+    return transparentOpacity || (noText && transparentBg);
+  }
+
+  function isOffsiteClickable(node) {
+    const url = getClickableUrl(node);
+    if (!url) {
+      return false;
+    }
+    const urlHost = heuristics.getUrlHostname(url, location.href);
+    return Boolean(urlHost && !profiles.profileMatchesHostname(state.profile, urlHost));
+  }
+
+  function getClickableUrl(node) {
+    const link = node.closest("a[href]") || node.querySelector && node.querySelector("a[href]");
+    return link ? link.getAttribute("href") || "" : node.getAttribute("href") || node.getAttribute("data-href") || node.getAttribute("data-url") || "";
+  }
+
+  function disableClickSurface(node, reason, rect, host, trigger) {
+    state.neutralizedNodes.add(node);
+    node.style.setProperty("pointer-events", "none", "important");
+    node.removeAttribute("onclick");
+    node.setAttribute("data-site-shield-neutralized", "true");
+    recordEvent(config.EVENT_CATEGORIES.DOM, "Chapter click surface neutralized", chapterOverlayDetails(node, rect, host, reason, trigger));
+  }
+
+  function chapterOverlayDetails(node, rect, host, reason, trigger) {
+    return {
+      action: "block",
+      pageType: state.pageType,
+      reason,
+      trigger,
+      tag: node.tagName.toLowerCase(),
+      node: describeNode(node),
+      host: host || "",
+      rect: rectSummary(rect)
+    };
+  }
+
+  function rectSummary(rect) {
+    return [
+      Math.round(rect.left),
+      Math.round(rect.top),
+      Math.round(rect.width),
+      Math.round(rect.height)
+    ].join(",");
+  }
+
   function chapterJunkTrigger(href, text) {
     const rules = state.pageRules || {};
     const urlHost = heuristics.getUrlHostname(href, location.href);
@@ -493,6 +667,19 @@
     }
     const href = node instanceof HTMLAnchorElement ? node.getAttribute("href") || "" : "";
     return /\/manga\/[^/]+\/chapter-/i.test(href);
+  }
+
+  function isChapterOverlayAllowed(node) {
+    for (const selector of state.pageRules.overlayAllowSelectors || []) {
+      try {
+        if (node.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        debugLog("invalid-overlay-allow-selector", { selector });
+      }
+    }
+    return false;
   }
 
   function removeOverlayCandidates(roots) {

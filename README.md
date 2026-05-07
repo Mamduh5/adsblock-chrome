@@ -95,6 +95,16 @@ Confirmed wildcard-style junk handled by URL/text keyword rules and static DNR r
 
 These are intentionally not applied to manga image hosts. Chapter cleanup focuses on anchors and small surrounding text containers whose href/text matches those domains or keywords, while avoiding images, chapter navigation, image server controls, forms, comments, and first-party chapter links.
 
+Chapter pages also get click-trap overlay neutralization. The content script checks bounded changed roots for clickable elements that are fixed/absolute/sticky, large enough to cover the viewport or reader area, near-transparent or empty, or off-site. Clear junk anchors are hidden; riskier page-covering surfaces have pointer events disabled and inline click handlers removed. Diagnostics include `pageType`, `reason`, tag/node summary, host, trigger, and approximate rect.
+
+Narrow Mangakakalot reader allowlist:
+
+- chapter navigation controls
+- image/server switching controls
+- chapter info panels
+- manga images and image containers
+- comments/login/report-style form controls
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.

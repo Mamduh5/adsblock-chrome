@@ -107,6 +107,9 @@ vm.runInContext(
   assert(profile, "Mangakakalot profile should be registered");
   assert(profile.pageTypes.chapter, "Mangakakalot profile should define chapter page type");
   assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
+  assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
+  assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
+  assert(profile.pageRules.chapter.readerSelectors.length > 0, "chapter rules should include reader selectors");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
 
   const activated = await internals.activateProfile("mangakakalot", false);

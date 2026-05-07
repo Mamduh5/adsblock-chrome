@@ -229,7 +229,31 @@
           ".chapter-nav",
           ".chapter-navigation",
           ".navi-change-chapter",
+          ".chapter-control",
+          ".chapter-controls",
+          ".panel-chapter-info-top",
+          ".panel-chapter-info-bottom",
+          ".container-chapter-reader img",
+          ".chapter-content img",
           ".comment",
+          "#comments",
+          "[class*='comment' i]"
+        ],
+        readerSelectors: [
+          ".container-chapter-reader",
+          ".chapter-content",
+          "#vungdoc",
+          ".reading-detail",
+          ".chapter-c"
+        ],
+        overlayAllowSelectors: [
+          ".chapter-nav",
+          ".chapter-navigation",
+          ".navi-change-chapter",
+          ".chapter-control",
+          ".chapter-controls",
+          ".panel-chapter-info-top",
+          ".panel-chapter-info-bottom",
           "#comments",
           "[class*='comment' i]"
         ],
@@ -240,7 +264,12 @@
           "div",
           "section"
         ],
-        maxAnchorScansPerPass: 80
+        maxAnchorScansPerPass: 100,
+        maxOverlayScansPerPass: 140,
+        overlayMinViewportWidthRatio: 0.72,
+        overlayMinViewportHeightRatio: 0.4,
+        overlayMinReaderOverlapRatio: 0.2,
+        overlayNearTransparentOpacity: 0.15
       }
     },
     pageGuard: {

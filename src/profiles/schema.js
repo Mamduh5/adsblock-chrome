@@ -114,8 +114,15 @@
         hardDomSelectors: normalizeList(rules && rules.hardDomSelectors || []),
         junkTextTerms: normalizeList(rules && rules.junkTextTerms || []),
         protectedSelectors: normalizeList(rules && rules.protectedSelectors || []),
+        readerSelectors: normalizeList(rules && rules.readerSelectors || []),
+        overlayAllowSelectors: normalizeList(rules && rules.overlayAllowSelectors || []),
         removalContainerSelectors: normalizeList(rules && rules.removalContainerSelectors || []),
-        maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80)
+        maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80),
+        maxOverlayScansPerPass: Number(rules && rules.maxOverlayScansPerPass || 120),
+        overlayMinViewportWidthRatio: Number(rules && rules.overlayMinViewportWidthRatio || 0.75),
+        overlayMinViewportHeightRatio: Number(rules && rules.overlayMinViewportHeightRatio || 0.45),
+        overlayMinReaderOverlapRatio: Number(rules && rules.overlayMinReaderOverlapRatio || 0.25),
+        overlayNearTransparentOpacity: Number(rules && rules.overlayNearTransparentOpacity || 0.12)
       };
     }
     return normalized;
