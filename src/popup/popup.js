@@ -6,6 +6,7 @@
     profileName: document.getElementById("profileName"),
     profileId: document.getElementById("profileId"),
     profileSelect: document.getElementById("profileSelect"),
+    knownProfiles: document.getElementById("knownProfiles"),
     globalEnabledToggle: document.getElementById("globalEnabledToggle"),
     profileEnabledToggle: document.getElementById("profileEnabledToggle"),
     debugToggle: document.getElementById("debugToggle"),
@@ -50,10 +51,11 @@
 
     currentProfileId = state.profile ? state.profile.id : "";
     fillProfileSelect(state.profiles || []);
+    renderKnownProfiles(state.profiles || []);
 
     elements.siteStatus.textContent = state.inScope
       ? "In scope: " + currentHost
-      : "Out of scope. Add a profile and manifest host permission to cover this site.";
+      : "Out of scope. Add a known profile and grant host access to cover this site.";
     elements.profileName.textContent = state.profile ? state.profile.displayName : "None";
     elements.profileId.textContent = state.profile ? state.profile.id : "out-of-scope";
     elements.globalEnabledToggle.checked = Boolean(state.enabled);
@@ -77,6 +79,44 @@
     }
   }
 
+  function renderKnownProfiles(profileSummaries) {
+    elements.knownProfiles.textContent = "";
+    for (const profile of profileSummaries) {
+      const row = document.createElement("div");
+      row.className = "profile-row";
+
+      const detail = document.createElement("div");
+      const title = document.createElement("strong");
+      title.textContent = profile.displayName;
+      const meta = document.createElement("small");
+      meta.textContent = [
+        profile.id,
+        profile.activated ? "activated" : "not activated",
+        profile.permissionGranted ? "permission granted" : "permission missing"
+      ].join(" · ");
+      if (profile.unavailableReason) {
+        meta.textContent += " · " + profile.unavailableReason;
+      }
+      detail.appendChild(title);
+      detail.appendChild(meta);
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = profile.activated ? "Deactivate" : "Activate";
+      button.addEventListener("click", () => {
+        if (profile.activated) {
+          deactivateProfile(profile.id);
+        } else {
+          activateProfile(profile);
+        }
+      });
+
+      row.appendChild(detail);
+      row.appendChild(button);
+      elements.knownProfiles.appendChild(row);
+    }
+  }
+
   async function onGlobalEnabledChanged() {
     const response = await sendMessage({ type: "setGlobalEnabled", enabled: elements.globalEnabledToggle.checked });
     setMessage(response && response.ok ? "Global setting saved. Reload matched tabs to apply DOM changes." : "Unable to save setting.");
@@ -92,6 +132,33 @@
       enabled: elements.profileEnabledToggle.checked
     });
     setMessage(response && response.ok ? "Profile setting saved. Reload matched tabs to apply DOM changes." : "Unable to save profile setting.");
+  }
+
+  async function activateProfile(profile) {
+    let permissionGranted = profile.permissionGranted;
+    if (!permissionGranted) {
+      permissionGranted = await requestHostPermission(profile.hostPermissionPatterns || []);
+    }
+    const response = await sendMessage({
+      type: "activateProfile",
+      profileId: profile.id,
+      requestPermission: false
+    });
+
+    if (response && response.ok && response.activated) {
+      setMessage("Profile activated. Reload matching tabs to run registered scripts.");
+    } else if (!permissionGranted || response && response.unavailableReason) {
+      setMessage("Profile needs host permission before activation.");
+    } else {
+      setMessage("Unable to activate profile.");
+    }
+    await refreshState();
+  }
+
+  async function deactivateProfile(profileId) {
+    const response = await sendMessage({ type: "deactivateProfile", profileId });
+    setMessage(response && response.ok ? "Profile deactivated. Reload matching tabs to clear old page state." : "Unable to deactivate profile.");
+    await refreshState();
   }
 
   async function onDebugChanged() {
@@ -196,6 +263,12 @@
   function sendMessage(message) {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => resolve(response));
+    });
+  }
+
+  function requestHostPermission(origins) {
+    return new Promise((resolve) => {
+      chrome.permissions.request({ origins }, (granted) => resolve(Boolean(granted)));
     });
   }
 

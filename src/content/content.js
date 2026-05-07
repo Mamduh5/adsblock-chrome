@@ -13,8 +13,13 @@
     customSelectors: [],
     removedNodes: new WeakSet(),
     observer: null,
-    cleanupQueued: false
+    cleanupQueued: false,
+    pageGuardListenerInstalled: false
   };
+
+  if (state.profile) {
+    installPageGuardListener();
+  }
 
   chrome.runtime.sendMessage({ type: "getState", hostname: host }, (response) => {
     if (!response || !response.ok || !response.enabled || !response.profile) {
@@ -40,25 +45,17 @@
   }
 
   function injectPageGuard() {
-    if (!state.profile.pageGuard || !state.profile.pageGuard.patchWindowOpen) {
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = chrome.runtime.getURL("src/content/page_guard.js");
-    script.dataset.siteShieldProfile = JSON.stringify({
-      profileId: state.profile.id,
-      domains: state.profile.domains,
-      includeSubdomains: Boolean(state.profile.includeSubdomains),
-      blockedHosts: heuristics.profileBlockedHosts(state.profile, state.customBlockedHosts),
-      pageGuard: state.profile.pageGuard,
-      redirectUrlTerms: state.profile.tuning && state.profile.tuning.redirectUrlTerms || []
-    });
-    script.onload = () => script.remove();
-    (document.documentElement || document.head || document).appendChild(script);
+    // The page guard is registered dynamically with world: "MAIN" at
+    // document_start by the service worker. This fallback is intentionally empty;
+    // isolated-world injection would be too late and cannot reliably patch page
+    // globals such as window.open.
   }
 
   function installPageGuardListener() {
+    if (state.pageGuardListenerInstalled) {
+      return;
+    }
+    state.pageGuardListenerInstalled = true;
     window.addEventListener("site-shield-open-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
       recordEvent(config.EVENT_CATEGORIES.OPEN_BLOCK, "window.open blocked", event.detail || {});

@@ -8,12 +8,16 @@
     "cookies",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
+    "scripting",
     "storage",
     "activeTab"
   ],
   "host_permissions": [
     "*://mangakakalot.gg/*",
     "*://www.mangakakalot.gg/*"
+  ],
+  "optional_host_permissions": [
+    "*://*/*"
   ],
   "background": {
     "service_worker": "src/background/service_worker.js"
@@ -22,27 +26,6 @@
     "default_title": "Site Shield",
     "default_popup": "src/popup/popup.html"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "*://mangakakalot.gg/*",
-        "*://www.mangakakalot.gg/*"
-      ],
-      "all_frames": true,
-      "run_at": "document_start",
-      "css": [
-        "src/content/content.css"
-      ],
-      "js": [
-        "src/profiles/schema.js",
-        "src/profiles/sites/mangakakalot.js",
-        "src/profiles/index.js",
-        "src/shared/config.js",
-        "src/shared/heuristics.js",
-        "src/content/content.js"
-      ]
-    }
-  ],
   "declarative_net_request": {
     "rule_resources": [
       {
@@ -51,16 +34,5 @@
         "path": "rules/static_rules.json"
       }
     ]
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "src/content/page_guard.js"
-      ],
-      "matches": [
-        "*://mangakakalot.gg/*",
-        "*://www.mangakakalot.gg/*"
-      ]
-    }
-  ]
+  }
 }

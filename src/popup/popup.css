@@ -84,6 +84,40 @@ p {
   margin-bottom: 12px;
 }
 
+.profile-list {
+  margin-bottom: 12px;
+  padding: 8px;
+  border: 1px solid #d9dee5;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.profile-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid #edf0f4;
+}
+
+.profile-row:first-of-type {
+  border-top: 0;
+}
+
+.profile-row strong {
+  display: block;
+  font-size: 13px;
+}
+
+.profile-row small {
+  display: block;
+  margin-top: 2px;
+  color: #66717d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .profile-panel > div,
 .profile-panel label {
   margin: 0;

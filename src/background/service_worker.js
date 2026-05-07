@@ -13,6 +13,7 @@ const heuristics = self.SiteShieldHeuristics;
 const DEFAULT_GLOBAL_SETTINGS = {
   enabled: true,
   debug: false,
+  activatedProfileIds: config.DEFAULT_ACTIVATED_PROFILE_IDS.slice(),
   profiles: {}
 };
 
@@ -71,7 +72,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function initializeExtension() {
   const settings = await getSettings();
   await saveSettings(settings);
-  await reconcileDynamicRules(settings);
+  await reconcileContentScripts(settings);
+  await reconcileNetworkRules(settings);
   await chrome.alarms.create("site-shield-cookie-cleanup", { periodInMinutes: 15 });
   await scrubSuspiciousCookiesForAllProfiles("startup");
 }
@@ -86,10 +88,14 @@ async function handleMessage(message, sender) {
     const settings = await getSettings();
     const profile = profileFromHostname(message.hostname || getSenderHost(sender));
     const profileSettings = profile ? getProfileSettings(settings, profile.id) : null;
+    const permissionGranted = profile ? await hasProfileHostPermission(profile) : false;
+    const activated = profile ? isProfileActivated(settings, profile.id) : false;
     return {
       ok: true,
       inScope: Boolean(profile),
-      enabled: Boolean(profile && settings.enabled && profileSettings.enabled),
+      activated,
+      permissionGranted,
+      enabled: Boolean(profile && settings.enabled && profileSettings.enabled && activated && permissionGranted),
       debug: settings.debug,
       profile,
       settings: profileSettings,
@@ -109,10 +115,25 @@ async function handleMessage(message, sender) {
       enabled: settings.enabled,
       debug: settings.debug,
       profile,
-      profiles: profiles.all().map(profileSummary),
+      activatedProfileIds: settings.activatedProfileIds,
+      profiles: await buildProfileRuntimeSummaries(settings),
       settings: profileSettings,
       stats,
       events
+    };
+  }
+
+  if (type === "listKnownProfiles") {
+    const settings = await getSettings();
+    return { ok: true, profiles: await buildProfileRuntimeSummaries(settings) };
+  }
+
+  if (type === "listActivatedProfiles") {
+    const settings = await getSettings();
+    return {
+      ok: true,
+      activatedProfileIds: settings.activatedProfileIds.slice(),
+      profiles: (await buildProfileRuntimeSummaries(settings)).filter((profile) => profile.activated)
     };
   }
 
@@ -120,7 +141,8 @@ async function handleMessage(message, sender) {
     const settings = await getSettings();
     settings.enabled = Boolean(message.enabled);
     await saveSettings(settings);
-    await reconcileDynamicRules(settings);
+    await reconcileContentScripts(settings);
+    await reconcileNetworkRules(settings);
     return { ok: true, settings };
   }
 
@@ -132,8 +154,27 @@ async function handleMessage(message, sender) {
     }
     getProfileSettings(settings, profile.id).enabled = Boolean(message.enabled);
     await saveSettings(settings);
-    await reconcileDynamicRules(settings);
+    await reconcileContentScripts(settings);
+    await reconcileNetworkRules(settings);
     return { ok: true, settings: getProfileSettings(settings, profile.id) };
+  }
+
+  if (type === "activateProfile") {
+    const result = await activateProfile(message.profileId, Boolean(message.requestPermission));
+    return Object.assign({ ok: true }, result);
+  }
+
+  if (type === "deactivateProfile") {
+    const result = await deactivateProfile(message.profileId);
+    return Object.assign({ ok: true }, result);
+  }
+
+  if (type === "checkProfilePermission") {
+    const profile = profiles.getById(message.profileId);
+    if (!profile) {
+      return { ok: false, error: "Unknown profile" };
+    }
+    return { ok: true, granted: await hasProfileHostPermission(profile) };
   }
 
   if (type === "setDebug") {
@@ -154,7 +195,7 @@ async function handleMessage(message, sender) {
       .filter((host) => !profiles.profileMatchesHostname(profile, host))
       .slice(0, config.MAX_CUSTOM_HOST_RULES_PER_PROFILE);
     await saveSettings(settings);
-    await reconcileDynamicRules(settings);
+    await reconcileNetworkRules(settings);
     return { ok: true, settings: profileSettings };
   }
 
@@ -213,6 +254,7 @@ async function getSettings() {
   const current = stored[config.STORAGE_SETTINGS_KEY] || {};
   const settings = Object.assign({}, DEFAULT_GLOBAL_SETTINGS, current);
   settings.profiles = settings.profiles || {};
+  settings.activatedProfileIds = normalizeActivatedProfileIds(settings.activatedProfileIds);
 
   // Migrate the first scaffold's single-site custom settings into the first
   // registered profile if a developer installed both versions while testing.
@@ -238,6 +280,7 @@ async function saveSettings(settings) {
   const normalized = Object.assign({}, DEFAULT_GLOBAL_SETTINGS, settings);
   normalized.enabled = Boolean(normalized.enabled);
   normalized.debug = Boolean(normalized.debug);
+  normalized.activatedProfileIds = normalizeActivatedProfileIds(normalized.activatedProfileIds);
   normalized.profiles = normalized.profiles || {};
 
   for (const profile of profiles.all()) {
@@ -246,6 +289,12 @@ async function saveSettings(settings) {
 
   await chrome.storage.local.set({ [config.STORAGE_SETTINGS_KEY]: normalized });
   return normalized;
+}
+
+function normalizeActivatedProfileIds(profileIds) {
+  const known = new Set(profiles.all().map((profile) => profile.id));
+  const ids = Array.isArray(profileIds) ? profileIds : config.DEFAULT_ACTIVATED_PROFILE_IDS;
+  return Array.from(new Set(ids.filter((profileId) => known.has(profileId))));
 }
 
 function normalizeProfileSettings(profileSettings) {
@@ -266,11 +315,82 @@ function getProfileSettings(settings, profileId) {
   return settings.profiles[profileId];
 }
 
-async function reconcileDynamicRules(settings) {
+async function reconcileContentScripts(settings) {
+  const desired = new Map();
+  if (settings.enabled) {
+    for (const profile of profiles.all()) {
+      if (await shouldActivateRuntimeProfile(settings, profile)) {
+        for (const registration of contentScriptRegistrationsForProfile(profile)) {
+          desired.set(registration.id, registration);
+        }
+      }
+    }
+  }
+
+  const existing = await chrome.scripting.getRegisteredContentScripts();
+  const managed = existing.filter((script) => isManagedContentScriptId(script.id));
+  const staleIds = managed
+    .filter((script) => !desired.has(script.id))
+    .map((script) => script.id);
+  const existingIds = new Set(managed.map((script) => script.id));
+  const missing = Array.from(desired.values())
+    .filter((script) => !existingIds.has(script.id));
+
+  if (staleIds.length) {
+    await chrome.scripting.unregisterContentScripts({ ids: staleIds });
+  }
+  if (missing.length) {
+    await chrome.scripting.registerContentScripts(missing);
+  }
+}
+
+function contentScriptRegistrationsForProfile(profile) {
+  const runtimeFiles = config.PROFILE_RUNTIME_FILES;
+  const registrations = [{
+    id: contentScriptId(profile),
+    matches: profile.matchPatterns,
+    allFrames: true,
+    runAt: "document_start",
+    persistAcrossSessions: true,
+    world: "ISOLATED",
+    css: ["src/content/content.css"],
+    js: runtimeFiles.concat(["src/content/content.js"])
+  }];
+
+  if (profile.pageGuard && profile.pageGuard.patchWindowOpen) {
+    registrations.push({
+      id: pageGuardScriptId(profile),
+      matches: profile.matchPatterns,
+      allFrames: true,
+      runAt: "document_start",
+      persistAcrossSessions: true,
+      world: "MAIN",
+      js: runtimeFiles.concat(["src/content/page_guard.js"])
+    });
+  }
+
+  return registrations;
+}
+
+function contentScriptId(profile) {
+  return config.CONTENT_SCRIPT_ID_PREFIX + profile.id;
+}
+
+function pageGuardScriptId(profile) {
+  return config.PAGE_GUARD_SCRIPT_ID_PREFIX + profile.id;
+}
+
+function isManagedContentScriptId(scriptId) {
+  return String(scriptId || "").startsWith(config.CONTENT_SCRIPT_ID_PREFIX)
+    || String(scriptId || "").startsWith(config.PAGE_GUARD_SCRIPT_ID_PREFIX);
+}
+
+async function reconcileNetworkRules(settings) {
   await reconcileStaticRules(settings);
 
-  const enableRulesets = settings.enabled && hasAnyEnabledProfile(settings) ? [config.STATIC_RULESET_ID] : [];
-  const disableRulesets = settings.enabled && hasAnyEnabledProfile(settings) ? [] : [config.STATIC_RULESET_ID];
+  const hasEnabled = await hasAnyRuntimeEnabledProfile(settings);
+  const enableRulesets = settings.enabled && hasEnabled ? [config.STATIC_RULESET_ID] : [];
+  const disableRulesets = settings.enabled && hasEnabled ? [] : [config.STATIC_RULESET_ID];
   await chrome.declarativeNetRequest.updateEnabledRulesets({
     enableRulesetIds: enableRulesets,
     disableRulesetIds: disableRulesets
@@ -280,7 +400,7 @@ async function reconcileDynamicRules(settings) {
   const managedRuleIds = existingDynamicRules
     .filter((rule) => isManagedDynamicRuleId(rule.id))
     .map((rule) => rule.id);
-  const addRules = settings.enabled ? buildAllDynamicRules(settings) : [];
+  const addRules = settings.enabled ? await buildAllDynamicRules(settings) : [];
 
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: managedRuleIds,
@@ -296,8 +416,7 @@ async function reconcileStaticRules(settings) {
   const enableRuleIds = [];
   const disableRuleIds = [];
   for (const profile of profiles.all()) {
-    const profileSettings = getProfileSettings(settings, profile.id);
-    const target = profileSettings.enabled ? enableRuleIds : disableRuleIds;
+    const target = await shouldActivateRuntimeProfile(settings, profile) ? enableRuleIds : disableRuleIds;
     for (const ruleId of profile.staticRuleIds || []) {
       target.push(ruleId);
     }
@@ -312,17 +431,24 @@ async function reconcileStaticRules(settings) {
   }
 }
 
-function hasAnyEnabledProfile(settings) {
-  return profiles.all().some((profile) => getProfileSettings(settings, profile.id).enabled);
+async function hasAnyRuntimeEnabledProfile(settings) {
+  for (const profile of profiles.all()) {
+    if (await shouldActivateRuntimeProfile(settings, profile)) {
+      return true;
+    }
+  }
+  return false;
 }
 
-function buildAllDynamicRules(settings) {
+async function buildAllDynamicRules(settings) {
   const rules = [];
-  profiles.all().forEach((profile, profileIndex) => {
-    const profileSettings = getProfileSettings(settings, profile.id);
-    if (!profileSettings.enabled) {
-      return;
+  const allProfiles = profiles.all();
+  for (let profileIndex = 0; profileIndex < allProfiles.length; profileIndex += 1) {
+    const profile = allProfiles[profileIndex];
+    if (!(await shouldActivateRuntimeProfile(settings, profile))) {
+      continue;
     }
+    const profileSettings = getProfileSettings(settings, profile.id);
 
     const hosts = heuristics.normalizeHostList((profile.dynamicBlockedHosts || []).concat(profileSettings.customBlockedHosts || []));
     const usedOffsets = new Set();
@@ -340,7 +466,7 @@ function buildAllDynamicRules(settings) {
         }
       });
     }
-  });
+  }
   return rules;
 }
 
@@ -372,8 +498,7 @@ async function scrubSuspiciousCookiesForAllProfiles(reason) {
   }
 
   for (const profile of profiles.all()) {
-    const profileSettings = getProfileSettings(settings, profile.id);
-    if (profileSettings.enabled) {
+    if (await shouldActivateRuntimeProfile(settings, profile)) {
       results.push(await scrubSuspiciousCookies(profile, reason));
     }
   }
@@ -382,8 +507,7 @@ async function scrubSuspiciousCookiesForAllProfiles(reason) {
 
 async function scrubSuspiciousCookies(profile, reason) {
   const settings = await getSettings();
-  const profileSettings = getProfileSettings(settings, profile.id);
-  if (!settings.enabled || !profileSettings.enabled) {
+  if (!settings.enabled || !(await shouldActivateRuntimeProfile(settings, profile))) {
     return { checked: 0, deleted: 0 };
   }
 
@@ -529,10 +653,100 @@ function profileSummary(profile) {
     displayName: profile.displayName,
     description: profile.description,
     domains: profile.domains,
+    matchPatterns: profile.matchPatterns,
     hostPermissionPatterns: profile.hostPermissionPatterns
   };
+}
+
+async function buildProfileRuntimeSummaries(settings) {
+  const summaries = [];
+  for (const profile of profiles.all()) {
+    const permissionGranted = await hasProfileHostPermission(profile);
+    const activated = isProfileActivated(settings, profile.id);
+    const profileSettings = getProfileSettings(settings, profile.id);
+    summaries.push(Object.assign({}, profileSummary(profile), {
+      activated,
+      permissionGranted,
+      enabled: Boolean(settings.enabled && profileSettings.enabled && activated && permissionGranted),
+      unavailableReason: permissionGranted ? "" : "Host permission is not granted."
+    }));
+  }
+  return summaries;
+}
+
+async function activateProfile(profileId, requestPermission) {
+  const settings = await getSettings();
+  const profile = profiles.getById(profileId);
+  if (!profile) {
+    return { activated: false, permissionGranted: false, error: "Unknown profile" };
+  }
+
+  let permissionGranted = await hasProfileHostPermission(profile);
+  if (!permissionGranted && requestPermission) {
+    permissionGranted = await requestProfileHostPermission(profile);
+  }
+
+  if (!permissionGranted) {
+    await reconcileContentScripts(settings);
+    await reconcileNetworkRules(settings);
+    return { activated: false, permissionGranted, unavailableReason: "Host permission is not granted." };
+  }
+
+  if (!settings.activatedProfileIds.includes(profile.id)) {
+    settings.activatedProfileIds.push(profile.id);
+  }
+  await saveSettings(settings);
+  await reconcileContentScripts(settings);
+  await reconcileNetworkRules(settings);
+  return { activated: true, permissionGranted };
+}
+
+async function deactivateProfile(profileId) {
+  const settings = await getSettings();
+  const profile = profiles.getById(profileId);
+  if (!profile) {
+    return { activated: false, error: "Unknown profile" };
+  }
+
+  settings.activatedProfileIds = settings.activatedProfileIds.filter((id) => id !== profile.id);
+  await saveSettings(settings);
+  await reconcileContentScripts(settings);
+  await reconcileNetworkRules(settings);
+  return { activated: false, permissionGranted: await hasProfileHostPermission(profile) };
+}
+
+function isProfileActivated(settings, profileId) {
+  return (settings.activatedProfileIds || []).includes(profileId);
+}
+
+async function shouldActivateRuntimeProfile(settings, profile) {
+  const profileSettings = getProfileSettings(settings, profile.id);
+  return Boolean(settings.enabled
+    && profileSettings.enabled
+    && isProfileActivated(settings, profile.id)
+    && await hasProfileHostPermission(profile));
+}
+
+async function hasProfileHostPermission(profile) {
+  return chrome.permissions.contains({ origins: profile.hostPermissionPatterns });
+}
+
+async function requestProfileHostPermission(profile) {
+  return chrome.permissions.request({ origins: profile.hostPermissionPatterns });
 }
 
 function getSenderHost(sender) {
   return heuristics.getUrlHostname(sender && sender.url ? sender.url : "");
 }
+
+self.SiteShieldBackgroundInternals = {
+  activateProfile,
+  buildAllDynamicRules,
+  buildProfileRuntimeSummaries,
+  contentScriptRegistrationsForProfile,
+  deactivateProfile,
+  hasProfileHostPermission,
+  isProfileActivated,
+  reconcileContentScripts,
+  reconcileNetworkRules
+};
