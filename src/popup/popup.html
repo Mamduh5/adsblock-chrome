@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Site Shield</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Site Shield</h1>
+        <p id="siteStatus">Checking current tab...</p>
+      </div>
+      <label class="switch" title="Enable Site Shield on the target site">
+        <input id="enabledToggle" type="checkbox">
+        <span></span>
+      </label>
+    </header>
+
+    <section class="stats" aria-label="Session counters">
+      <div>
+        <strong id="blockedRequests">0</strong>
+        <span>Requests</span>
+      </div>
+      <div>
+        <strong id="removedOverlays">0</strong>
+        <span>Overlays</span>
+      </div>
+      <div>
+        <strong id="blockedRedirects">0</strong>
+        <span>Redirects</span>
+      </div>
+      <div>
+        <strong id="deletedStorageItems">0</strong>
+        <span>Storage</span>
+      </div>
+    </section>
+
+    <label class="check-row">
+      <input id="debugToggle" type="checkbox">
+      <span>Debug logging</span>
+    </label>
+
+    <label>
+      Custom blocked hosts
+      <textarea id="customHosts" spellcheck="false" placeholder="bad-ad-host.example"></textarea>
+    </label>
+
+    <label>
+      Custom CSS selectors
+      <textarea id="customSelectors" spellcheck="false" placeholder=".annoying-overlay"></textarea>
+    </label>
+
+    <footer>
+      <button id="saveButton" type="button">Save</button>
+      <button id="scrubButton" type="button">Scrub cookies</button>
+      <button id="resetButton" type="button">Reset counts</button>
+    </footer>
+
+    <p id="message" role="status"></p>
+    <script src="popup.js"></script>
+  </body>
+</html>

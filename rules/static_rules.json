@@ -1,0 +1,88 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "example.com"
+      ],
+      "requestDomains": [
+        "ad-maven.com",
+        "adnxs.com",
+        "adservice.google.com",
+        "adsterra.com",
+        "doubleclick.net",
+        "exoclick.com",
+        "googlesyndication.com",
+        "mgid.com",
+        "onclickads.net",
+        "outbrain.com",
+        "popads.net",
+        "propellerads.com",
+        "redirectingat.com",
+        "taboola.com",
+        "trafficjunky.net",
+        "yllix.com"
+      ],
+      "resourceTypes": [
+        "font",
+        "image",
+        "media",
+        "object",
+        "other",
+        "ping",
+        "script",
+        "sub_frame",
+        "websocket",
+        "xmlhttprequest"
+      ]
+    }
+  },
+  {
+    "id": 2,
+    "priority": 2,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "example.com"
+      ],
+      "requestDomains": [
+        "adf.ly",
+        "bc.vc",
+        "clk.sh",
+        "linkbucks.com",
+        "ouo.io",
+        "shorte.st",
+        "tinyium.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame"
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "example.com"
+      ],
+      "regexFilter": "^https?://([^/]+\\.)?example\\.com/.*(pop|popup|redirect|interstitial)",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest"
+      ]
+    }
+  }
+]

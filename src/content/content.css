@@ -1,0 +1,10 @@
+html.site-shield-scroll-unlocked,
+html.site-shield-scroll-unlocked body {
+  overflow: auto !important;
+}
+
+[data-site-shield-hidden="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

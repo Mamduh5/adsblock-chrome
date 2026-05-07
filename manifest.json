@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "Site Shield",
+  "version": "0.1.0",
+  "description": "A local-only, domain-specific shield for example.com and its subdomains.",
+  "permissions": [
+    "alarms",
+    "cookies",
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "*://example.com/*",
+    "*://*.example.com/*"
+  ],
+  "background": {
+    "service_worker": "src/background/service_worker.js"
+  },
+  "action": {
+    "default_title": "Site Shield",
+    "default_popup": "src/popup/popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://example.com/*",
+        "*://*.example.com/*"
+      ],
+      "all_frames": true,
+      "run_at": "document_start",
+      "css": [
+        "src/content/content.css"
+      ],
+      "js": [
+        "src/shared/config.js",
+        "src/shared/heuristics.js",
+        "src/content/content.js"
+      ]
+    }
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "site_shield_static",
+        "enabled": true,
+        "path": "rules/static_rules.json"
+      }
+    ]
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content/page_guard.js"
+      ],
+      "matches": [
+        "*://example.com/*",
+        "*://*.example.com/*"
+      ]
+    }
+  ]
+}

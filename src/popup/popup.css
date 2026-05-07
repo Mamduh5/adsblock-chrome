@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #17202a;
+  background: #f7f8fa;
+}
+
+body {
+  width: 360px;
+  margin: 0;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+p {
+  margin: 4px 0 0;
+  color: #5b6570;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 24px;
+  flex: 0 0 auto;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch span {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  background: #a9b1ba;
+  border-radius: 999px;
+  transition: background 140ms ease;
+}
+
+.switch span::before {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(23, 32, 42, 0.3);
+  transition: transform 140ms ease;
+}
+
+.switch input:checked + span {
+  background: #16775b;
+}
+
+.switch input:checked + span::before {
+  transform: translateX(20px);
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stats div {
+  padding: 8px 6px;
+  border: 1px solid #d9dee5;
+  border-radius: 6px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.stats strong,
+.stats span {
+  display: block;
+}
+
+.stats strong {
+  font-size: 16px;
+}
+
+.stats span {
+  margin-top: 2px;
+  color: #66717d;
+  font-size: 11px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  min-height: 58px;
+  margin-top: 5px;
+  box-sizing: border-box;
+  resize: vertical;
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  padding: 8px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  background: #ffffff;
+  color: #17202a;
+}
+
+footer {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  min-height: 32px;
+  border: 1px solid #c5ccd5;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #17202a;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:first-child {
+  border-color: #16775b;
+  background: #16775b;
+  color: #ffffff;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#message {
+  min-height: 18px;
+}
