@@ -5,6 +5,10 @@
   const profiles = globalThis.SiteShieldProfiles;
   const heuristics = globalThis.SiteShieldHeuristics;
   const host = location.hostname;
+  const DOM_PROCESS_DELAY_MS = 250;
+  const MAX_PENDING_ROOTS = 40;
+  const MAX_NODES_PER_PASS = 350;
+  const MAX_INSPECTION_URLS_PER_PASS = 40;
   const state = {
     enabled: false,
     debug: false,
@@ -13,9 +17,19 @@
     customBlockedHosts: [],
     customSelectors: [],
     removedNodes: new WeakSet(),
+    processedNodes: new WeakSet(),
     observedEventKeys: new Set(),
+    pendingRoots: new Set(),
+    pendingFullScan: false,
+    cleanupTimer: null,
     observer: null,
     cleanupQueued: false,
+    perfDelta: {
+      domPasses: 0,
+      skippedDomPasses: 0,
+      domNodesProcessed: 0
+    },
+    perfTimer: null,
     pageGuardListenerInstalled: false
   };
 
@@ -44,7 +58,7 @@
     tryScrubStorage("sessionStorage");
     installClickInterceptor();
     installMutationObserver();
-    queueCleanup();
+    queueCleanup(document.documentElement, true);
   }
 
   function injectPageGuard() {
@@ -132,21 +146,49 @@
 
   function installMutationObserver() {
     const root = document.documentElement || document;
-    state.observer = new MutationObserver(() => {
-      queueCleanup();
+    state.observer = new MutationObserver((mutations) => {
+      let queued = false;
+      for (const mutation of mutations) {
+        if (mutation.type === "childList") {
+          for (const node of mutation.addedNodes) {
+            if (node instanceof Element) {
+              queueCleanup(node, false);
+              queued = true;
+            }
+          }
+        } else if (mutation.target instanceof Element) {
+          queueCleanup(mutation.target, false);
+          queued = true;
+        }
+      }
+      if (!queued && mutations.length) {
+        countSkippedDomPass();
+      }
     });
     state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "id", "src"] });
   }
 
-  function queueCleanup() {
-    if (state.cleanupQueued) {
+  function queueCleanup(root, forceFullScan) {
+    if (forceFullScan) {
+      state.pendingFullScan = true;
+      state.pendingRoots.clear();
+    } else if (root instanceof Element && !state.pendingFullScan) {
+      state.pendingRoots.add(root);
+      if (state.pendingRoots.size > MAX_PENDING_ROOTS) {
+        state.pendingFullScan = true;
+        state.pendingRoots.clear();
+      }
+    }
+
+    if (state.cleanupTimer) {
+      countSkippedDomPass();
       return;
     }
-    state.cleanupQueued = true;
-    requestAnimationFrame(() => {
-      state.cleanupQueued = false;
+
+    state.cleanupTimer = setTimeout(() => {
+      state.cleanupTimer = null;
       cleanupDom();
-    });
+    }, DOM_PROCESS_DELAY_MS);
   }
 
   function cleanupDom() {
@@ -154,28 +196,41 @@
       return;
     }
 
+    const roots = state.pendingFullScan
+      ? [document.documentElement]
+      : Array.from(state.pendingRoots).filter((root) => root.isConnected);
+    state.pendingRoots.clear();
+    state.pendingFullScan = false;
+    state.perfDelta.domPasses += 1;
+
+    if (!roots.length) {
+      flushPerfSoon();
+      return;
+    }
+
     let removed = 0;
-    removed += removeBySelectors();
-    removed += removeSuspiciousIframes();
-    removed += removeOverlayCandidates();
+    removed += removeBySelectors(roots);
+    removed += removeSuspiciousIframes(roots);
+    removed += removeOverlayCandidates(roots);
     if (state.inspectionMode) {
-      observePageUrls();
+      observePageUrls(roots);
     }
 
     if (removed > 0) {
       document.documentElement.classList.add("site-shield-scroll-unlocked");
       incrementStats({ removedOverlays: removed });
     }
+    flushPerfSoon();
   }
 
-  function removeBySelectors() {
+  function removeBySelectors(roots) {
     let removed = 0;
     const selectors = (state.profile.hardDomSelectors || state.profile.suspiciousDomSelectors || []).concat(state.customSelectors);
 
     for (const selector of heuristics.safeSelectorList(selectors)) {
-      let nodes;
+      let nodes = [];
       try {
-        nodes = document.querySelectorAll(selector);
+        nodes = queryWithinRoots(roots, selector, MAX_NODES_PER_PASS);
       } catch (error) {
         debugLog("invalid-selector", { selector });
         continue;
@@ -190,23 +245,23 @@
     }
 
     if (state.inspectionMode) {
-      observeCandidateSelectors();
+      observeCandidateSelectors(roots);
     }
 
     return removed;
   }
 
-  function observeCandidateSelectors() {
+  function observeCandidateSelectors(roots) {
     for (const selector of heuristics.safeSelectorList(state.profile.candidateDomSelectors || [])) {
-      let nodes;
+      let nodes = [];
       try {
-        nodes = document.querySelectorAll(selector);
+        nodes = queryWithinRoots(roots, selector, 12);
       } catch (error) {
         debugLog("invalid-candidate-selector", { selector });
         continue;
       }
 
-      for (const node of Array.from(nodes).slice(0, 10)) {
+      for (const node of nodes) {
         if (node instanceof HTMLElement) {
           recordEvent(config.EVENT_CATEGORIES.DOM, "Candidate selector matched", {
             action: "observe",
@@ -229,9 +284,9 @@
     return isOverlayStyle(node, style) || heuristics.textLooksLikeTrap(state.profile, text);
   }
 
-  function removeSuspiciousIframes() {
+  function removeSuspiciousIframes(roots) {
     let removed = 0;
-    for (const frame of document.querySelectorAll("iframe")) {
+    for (const frame of queryWithinRoots(roots, "iframe", MAX_NODES_PER_PASS)) {
       const src = frame.getAttribute("src") || "";
       if (state.inspectionMode && isCandidateUrl(src)) {
         recordEvent(config.EVENT_CATEGORIES.NETWORK, "Candidate iframe host observed", {
@@ -249,9 +304,13 @@
     return removed;
   }
 
-  function observePageUrls() {
-    const nodes = document.querySelectorAll("a[href], iframe[src], script[src], img[src], link[href]");
-    for (const node of Array.from(nodes).slice(0, 200)) {
+  function observePageUrls(roots) {
+    const nodes = queryWithinRoots(roots, "a[href], iframe[src], script[src], img[src], link[href]", MAX_INSPECTION_URLS_PER_PASS);
+    for (const node of nodes) {
+      if (state.processedNodes.has(node)) {
+        continue;
+      }
+      state.processedNodes.add(node);
       const url = node.getAttribute("href") || node.getAttribute("src") || "";
       if (!url) {
         continue;
@@ -279,9 +338,9 @@
     }
   }
 
-  function removeOverlayCandidates() {
+  function removeOverlayCandidates(roots) {
     let removed = 0;
-    const candidates = document.querySelectorAll("body *");
+    const candidates = collectElements(roots, MAX_NODES_PER_PASS);
 
     for (const node of candidates) {
       if (!(node instanceof HTMLElement) || state.removedNodes.has(node)) {
@@ -338,6 +397,85 @@
     return area / viewportArea >= Number(tuning.overlayMinViewportAreaRatio || 0.35)
       || (rect.width >= window.innerWidth * Number(tuning.overlayWideWidthRatio || 0.85)
         && rect.height >= Number(tuning.overlayWideMinHeight || 120));
+  }
+
+  function queryWithinRoots(roots, selector, limit) {
+    const results = [];
+    const seen = new WeakSet();
+    for (const root of roots) {
+      if (!(root instanceof Element) || !root.isConnected) {
+        continue;
+      }
+      try {
+        if (root.matches(selector) && !seen.has(root)) {
+          seen.add(root);
+          results.push(root);
+        }
+      } catch (error) {
+        throw error;
+      }
+
+      for (const node of root.querySelectorAll(selector)) {
+        if (!seen.has(node)) {
+          seen.add(node);
+          results.push(node);
+          if (results.length >= limit) {
+            state.perfDelta.domNodesProcessed += results.length;
+            return results;
+          }
+        }
+      }
+    }
+    state.perfDelta.domNodesProcessed += results.length;
+    return results;
+  }
+
+  function collectElements(roots, limit) {
+    const results = [];
+    const seen = new WeakSet();
+    for (const root of roots) {
+      if (!(root instanceof Element) || !root.isConnected) {
+        continue;
+      }
+      if (!seen.has(root)) {
+        seen.add(root);
+        results.push(root);
+      }
+      for (const node of root.querySelectorAll("*")) {
+        if (!seen.has(node)) {
+          seen.add(node);
+          results.push(node);
+          if (results.length >= limit) {
+            state.perfDelta.domNodesProcessed += results.length;
+            return results;
+          }
+        }
+      }
+    }
+    state.perfDelta.domNodesProcessed += results.length;
+    return results;
+  }
+
+  function countSkippedDomPass() {
+    state.perfDelta.skippedDomPasses += 1;
+  }
+
+  function flushPerfSoon() {
+    if (state.perfTimer) {
+      return;
+    }
+    state.perfTimer = setTimeout(() => {
+      state.perfTimer = null;
+      const delta = state.perfDelta;
+      state.perfDelta = {
+        domPasses: 0,
+        skippedDomPasses: 0,
+        domNodesProcessed: 0
+      };
+      if (delta.domPasses || delta.skippedDomPasses || delta.domNodesProcessed) {
+        chrome.runtime.sendMessage({ type: "recordPerf", profileId: state.profile.id, delta });
+      }
+    }, 3000);
   }
 
   function findSuspiciousAncestor(node) {

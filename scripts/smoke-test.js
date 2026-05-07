@@ -119,6 +119,7 @@ vm.runInContext(
 
   const snapshot = await internals.buildDebugSnapshot("mangakakalot", "mangakakalot.gg");
   assert.strictEqual(snapshot.activeProfileId, "mangakakalot", "snapshot should include active profile");
+  assert(snapshot.perf, "snapshot should include performance counters");
   assert(Array.isArray(snapshot.profileTuningSummary.hardBlockHosts), "snapshot should include hard hosts");
   assert(Array.isArray(snapshot.profileTuningSummary.candidateBlockHosts), "snapshot should include candidate hosts");
 

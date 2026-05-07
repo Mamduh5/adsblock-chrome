@@ -233,6 +233,12 @@ textarea {
   line-height: 1.35;
 }
 
+#perfSummary {
+  margin: 0 0 6px;
+  color: #66717d;
+  font-size: 11px;
+}
+
 #recentEvents li {
   margin-bottom: 7px;
 }

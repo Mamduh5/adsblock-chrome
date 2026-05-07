@@ -22,6 +22,7 @@
     removedOverlays: document.getElementById("removedOverlays"),
     blockedRedirects: document.getElementById("blockedRedirects"),
     deletedStorageItems: document.getElementById("deletedStorageItems"),
+    perfSummary: document.getElementById("perfSummary"),
     recentEvents: document.getElementById("recentEvents")
   };
 
@@ -69,6 +70,7 @@
     elements.customHosts.value = state.settings ? (state.settings.customBlockedHosts || []).join("\n") : "";
     elements.customSelectors.value = state.settings ? (state.settings.customSelectors || []).join("\n") : "";
     setCounters(state.stats || {});
+    renderPerf(state.perf || {});
     renderEvents(state.events || []);
     setScopedControls(Boolean(state.profile));
   }
@@ -284,6 +286,20 @@
       }
       elements.recentEvents.appendChild(item);
     }
+  }
+
+  function renderPerf(perf) {
+    elements.perfSummary.textContent = "Perf: dom "
+      + String(perf.domPasses || 0)
+      + " passes, "
+      + String(perf.skippedDomPasses || 0)
+      + " skipped, "
+      + String(perf.eventsDropped || 0)
+      + " dropped, "
+      + String(perf.eventsCoalesced || 0)
+      + " coalesced, "
+      + String(perf.storageFlushes || 0)
+      + " flushes";
   }
 
   function eventContext(event) {

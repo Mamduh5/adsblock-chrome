@@ -18,6 +18,22 @@ const DEFAULT_GLOBAL_SETTINGS = {
   profiles: {}
 };
 
+let cachedSettings = null;
+let eventFlushTimer = null;
+let eventBuffer = [];
+const coalescedEvents = new Map();
+const categoryWindows = new Map();
+const perfCounters = {
+  eventsQueued: 0,
+  eventsDropped: 0,
+  eventsCoalesced: 0,
+  storageFlushes: 0,
+  lastFlushSize: 0,
+  domPasses: 0,
+  skippedDomPasses: 0,
+  domNodesProcessed: 0
+};
+
 chrome.runtime.onInstalled.addListener(() => {
   initializeExtension();
 });
@@ -113,7 +129,7 @@ async function handleMessage(message, sender) {
     const profile = profileFromHostname(message.hostname || "");
     const profileSettings = profile ? getProfileSettings(settings, profile.id) : null;
     const stats = profile ? await getStats(profile.id) : emptyStats();
-    const events = profile ? await getRecentEvents(profile.id) : [];
+    const events = profile ? await getRecentEvents(profile.id, 15) : [];
     return {
       ok: true,
       inScope: Boolean(profile),
@@ -125,7 +141,8 @@ async function handleMessage(message, sender) {
       profiles: await buildProfileRuntimeSummaries(settings),
       settings: profileSettings,
       stats,
-      events
+      events,
+      perf: getPerfSummary()
     };
   }
 
@@ -245,6 +262,11 @@ async function handleMessage(message, sender) {
     return { ok: true };
   }
 
+  if (type === "recordPerf") {
+    mergePerfCounters(message.delta || {});
+    return { ok: true };
+  }
+
   if (type === "resetStats") {
     await resetStats(message.profileId || "");
     return { ok: true, stats: await getStats(message.profileId || "") };
@@ -272,6 +294,10 @@ async function handleMessage(message, sender) {
 }
 
 async function getSettings() {
+  if (cachedSettings) {
+    return cachedSettings;
+  }
+
   const stored = await chrome.storage.local.get(config.STORAGE_SETTINGS_KEY);
   const current = stored[config.STORAGE_SETTINGS_KEY] || {};
   const settings = Object.assign({}, DEFAULT_GLOBAL_SETTINGS, current);
@@ -295,6 +321,7 @@ async function getSettings() {
     settings.profiles[profile.id] = normalizeProfileSettings(settings.profiles[profile.id]);
   }
 
+  cachedSettings = settings;
   return settings;
 }
 
@@ -314,6 +341,7 @@ async function saveSettings(settings) {
   }
 
   await chrome.storage.local.set({ [config.STORAGE_SETTINGS_KEY]: normalized });
+  cachedSettings = normalized;
   return normalized;
 }
 
@@ -650,16 +678,25 @@ function emptyStats() {
 }
 
 async function recordEvent(profileId, category, summary, details, context) {
-  const settings = await getSettings();
+  const settings = cachedSettings || await getSettings();
   if (!settings.debug) {
     return;
   }
 
-  const stored = await chrome.storage.local.get(config.RECENT_EVENTS_KEY);
-  const events = stored[config.RECENT_EVENTS_KEY] || [];
-  events.unshift({
-    id: Date.now() + ":" + Math.random().toString(36).slice(2),
-    time: new Date().toISOString(),
+  const action = details && details.action || "";
+  if (!settings.inspectionMode && action === "observe") {
+    return;
+  }
+
+  const now = Date.now();
+  if (!allowEvent(category, settings.inspectionMode, now)) {
+    perfCounters.eventsDropped += 1;
+    return;
+  }
+
+  const event = sanitizeEvent({
+    id: now + ":" + Math.random().toString(36).slice(2),
+    time: new Date(now).toISOString(),
     profileId,
     category,
     summary: summary || category,
@@ -668,9 +705,128 @@ async function recordEvent(profileId, category, summary, details, context) {
     details: details || {}
   });
 
+  const coalesceKey = eventKey(event);
+  const existing = coalescedEvents.get(coalesceKey);
+  if (existing) {
+    existing.count += 1;
+    existing.time = event.time;
+    existing.lastSeen = event.time;
+    perfCounters.eventsCoalesced += 1;
+    scheduleEventFlush();
+    return;
+  }
+
+  event.count = 1;
+  event.firstSeen = event.time;
+  event.lastSeen = event.time;
+  coalescedEvents.set(coalesceKey, event);
+  eventBuffer.push(event);
+  perfCounters.eventsQueued += 1;
+
+  if (eventBuffer.length > config.MAX_EVENT_BUFFER) {
+    const dropped = eventBuffer.splice(0, eventBuffer.length - config.MAX_EVENT_BUFFER);
+    for (const droppedEvent of dropped) {
+      coalescedEvents.delete(eventKey(droppedEvent));
+    }
+    perfCounters.eventsDropped += dropped.length;
+  }
+
+  scheduleEventFlush();
+}
+
+function allowEvent(category, inspectionMode, now) {
+  const windowSizeMs = 1000;
+  const limit = inspectionMode ? config.EVENT_RATE_LIMIT_INSPECTION : config.EVENT_RATE_LIMIT_BASIC;
+  const key = category || "unknown";
+  const current = categoryWindows.get(key) || { start: now, count: 0 };
+  if (now - current.start > windowSizeMs) {
+    current.start = now;
+    current.count = 0;
+  }
+  current.count += 1;
+  categoryWindows.set(key, current);
+  return current.count <= limit;
+}
+
+function sanitizeEvent(event) {
+  const maxString = config.MAX_EVENT_STRING_LENGTH;
+  const clean = {
+    id: trimValue(event.id, 80),
+    time: trimValue(event.time, 40),
+    profileId: trimValue(event.profileId, 60),
+    category: trimValue(event.category, 40),
+    summary: trimValue(event.summary, 120),
+    pageUrl: trimValue(event.pageUrl, 180),
+    pageHost: trimValue(event.pageHost, 80),
+    details: {}
+  };
+
+  for (const [key, value] of Object.entries(event.details || {})) {
+    if (typeof value === "string") {
+      clean.details[key] = trimValue(value, maxString);
+    } else if (typeof value === "number" || typeof value === "boolean") {
+      clean.details[key] = value;
+    } else if (Array.isArray(value)) {
+      clean.details[key] = value.slice(0, 8).map((item) => trimValue(String(item), maxString));
+    } else if (value != null) {
+      clean.details[key] = trimValue(String(value), maxString);
+    }
+  }
+
+  return clean;
+}
+
+function trimValue(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  return text.length > maxLength ? text.slice(0, maxLength - 1) + "..." : text;
+}
+
+function eventKey(event) {
+  const details = event.details || {};
+  return [
+    event.profileId,
+    event.category,
+    details.action || "",
+    event.summary,
+    details.requestHost || details.urlHost || "",
+    details.selector || "",
+    details.key || details.name || "",
+    details.node || "",
+    details.reason || ""
+  ].join("|");
+}
+
+function scheduleEventFlush() {
+  if (eventFlushTimer) {
+    return;
+  }
+  eventFlushTimer = setTimeout(() => {
+    eventFlushTimer = null;
+    flushEvents();
+  }, config.EVENT_FLUSH_INTERVAL_MS);
+}
+
+async function flushEvents() {
+  if (!eventBuffer.length) {
+    return;
+  }
+
+  const pending = eventBuffer.splice(0, eventBuffer.length);
+  for (const event of pending) {
+    coalescedEvents.delete(eventKey(event));
+  }
+
+  const stored = await chrome.storage.local.get(config.RECENT_EVENTS_KEY);
+  const events = stored[config.RECENT_EVENTS_KEY] || [];
+  for (let index = pending.length - 1; index >= 0; index -= 1) {
+    events.unshift(pending[index]);
+  }
+
   await chrome.storage.local.set({
     [config.RECENT_EVENTS_KEY]: events.slice(0, config.MAX_RECENT_EVENTS)
   });
+  perfCounters.storageFlushes += 1;
+  perfCounters.lastFlushSize = pending.length;
 }
 
 async function buildDebugSnapshot(profileId, hostname) {
@@ -680,7 +836,7 @@ async function buildDebugSnapshot(profileId, hostname) {
   const profileSummaries = await buildProfileRuntimeSummaries(settings);
   const registeredScripts = await chrome.scripting.getRegisteredContentScripts();
   const stats = profile ? await getStats(profile.id) : emptyStats();
-  const events = profile ? await getRecentEvents(profile.id) : await getRecentEvents("");
+  const events = profile ? await getRecentEvents(profile.id, 25) : await getRecentEvents("", 25);
   const permissionSummary = [];
 
   for (const knownProfile of profiles.all()) {
@@ -710,6 +866,7 @@ async function buildDebugSnapshot(profileId, hostname) {
         runAt: script.runAt
       })),
     counters: stats,
+    perf: getPerfSummary(),
     recentEvents: events.slice(0, 25),
     profiles: profileSummaries,
     profileSettings: profile ? getProfileSettings(settings, profile.id) : null,
@@ -728,10 +885,25 @@ async function buildDebugSnapshot(profileId, hostname) {
   };
 }
 
-async function getRecentEvents(profileId) {
+async function getRecentEvents(profileId, limit) {
+  await flushEvents();
   const stored = await chrome.storage.local.get(config.RECENT_EVENTS_KEY);
   const events = stored[config.RECENT_EVENTS_KEY] || [];
-  return profileId ? events.filter((event) => event.profileId === profileId) : events;
+  const filtered = profileId ? events.filter((event) => event.profileId === profileId) : events;
+  return filtered.slice(0, limit || 30);
+}
+
+function getPerfSummary() {
+  return Object.assign({}, perfCounters, {
+    bufferedEvents: eventBuffer.length,
+    coalesceKeys: coalescedEvents.size
+  });
+}
+
+function mergePerfCounters(delta) {
+  for (const key of ["domPasses", "skippedDomPasses", "domNodesProcessed", "eventsDropped", "eventsCoalesced"]) {
+    perfCounters[key] += Number(delta[key] || 0);
+  }
 }
 
 function profileFromUrl(url) {
@@ -859,5 +1031,6 @@ self.SiteShieldBackgroundInternals = {
   hasProfileHostPermission,
   isProfileActivated,
   reconcileContentScripts,
-  reconcileNetworkRules
+  reconcileNetworkRules,
+  getPerfSummary
 };

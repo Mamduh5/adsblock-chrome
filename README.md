@@ -145,6 +145,14 @@ When debug logging is enabled, the background stores a bounded local event list 
 
 The popup shows the newest events for the matched profile and includes a **Copy debug** button. The copied diagnostic JSON contains extension version, active profile id, granted permissions summary, activated profiles, registered content scripts, counters, recent events, profile settings, and the Mangakakalot tuning summary.
 
+Debug has three practical safety levels:
+
+- Off: no debug events are recorded.
+- Basic debug: records important blocked actions only.
+- Inspection: records observe-only candidate matches, but DOM work is throttled and events are buffered, coalesced, rate-limited, trimmed, and capped.
+
+The popup perf line reports DOM passes, skipped passes, dropped events, coalesced events, and storage flushes. If these climb quickly while browsing, turn inspection mode off and promote only rules that already have repeated evidence.
+
 ## Mangakakalot Tuning Workflow
 
 1. Load the extension unpacked and open `https://mangakakalot.gg` or `https://www.mangakakalot.gg`.
