@@ -286,12 +286,17 @@
           ".container-chapter-reader [class*='advert' i]",
           ".container-chapter-reader [id*='advert' i]",
           ".container-chapter-reader [class*='adsby' i]",
-          ".container-chapter-reader [class*='ad-label' i]"
+          ".container-chapter-reader [class*='ad-label' i]",
+          "[class*='content-notification' i]",
+          "[id*='content-notification' i]",
+          "[class*='notification' i] button",
+          "[id*='notification' i] button"
         ],
         orphanTextTerms: [
           "advertisement",
           "advertisements",
-          "sponsored"
+          "sponsored",
+          "content notification"
         ],
         removalContainerSelectors: [
           "p",
@@ -316,6 +321,8 @@
           "auxclick"
         ],
         shieldPlainReaderClicks: true,
+        shieldPlainChapterClicks: true,
+        safeNavigateFirstPartyAnchors: true,
         shieldMutationBurstMs: 1200
       }
     },

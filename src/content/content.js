@@ -38,6 +38,7 @@
       opensBlocked: 0,
       duplicateOpenAttemptsBlocked: 0,
       orphanJunkRemoved: 0,
+      footerJunkGroupsRemoved: 0,
       expensiveScansSkipped: 0
     },
     perfTimer: null,
@@ -145,19 +146,26 @@
       }
 
       if (shouldShieldChapterClick(target)) {
+        const safeLink = getSafeChapterLink(target);
         state.chapterClickCount += 1;
         stopEvent(event);
         incrementStats({ blockedRedirects: 1 });
         addPerfDelta({ clicksShielded: 1 });
         recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter capture click shielded", {
-          action: "block",
+          action: safeLink ? "allow_safe_navigate" : "block",
           pageType: state.pageType,
-          source: clickActionSource(target),
+          source: safeLink ? "anchor_first_party" : clickActionSource(target),
           clickCount: state.chapterClickCount,
           afterMutationBurst: Date.now() - state.lastMutationTime <= Number(state.pageRules.shieldMutationBurstMs || 1200),
+          url: safeLink || "",
           target: describeNode(target),
-          reason: "reader_delegated_click"
+          reason: safeLink ? "first_party_link" : "chapter_click_shield"
         });
+        if (safeLink) {
+          window.setTimeout(() => {
+            location.assign(safeLink);
+          }, 0);
+        }
         return;
       }
 
@@ -437,8 +445,12 @@
   function removeChapterJunk(roots) {
     const rules = state.pageRules || {};
     const maxScans = Number(rules.maxAnchorScansPerPass || 80);
-    const anchors = queryWithinRoots(roots, "a[href]", maxScans);
+    const anchors = uniqueElements(
+      queryWithinRoots(roots, chapterJunkAnchorSelector(rules), maxScans)
+        .concat(queryWithinRoots(roots, "a[href]", maxScans))
+    );
     let removed = 0;
+    let footerRemoved = 0;
 
     for (const anchor of anchors) {
       if (!(anchor instanceof HTMLElement) || state.removedNodes.has(anchor) || isProtectedChapterNode(anchor)) {
@@ -465,9 +477,42 @@
         container: describeNode(target)
       });
       removed += 1;
+      if (isFooterJunkNode(target)) {
+        footerRemoved += 1;
+      }
     }
 
+    if (footerRemoved > 0) {
+      addPerfDelta({ footerJunkGroupsRemoved: footerRemoved });
+    }
     return removed;
+  }
+
+  function chapterJunkAnchorSelector(rules) {
+    const selectors = [];
+    for (const hostName of rules.hardBlockHosts || []) {
+      selectors.push("a[href*='" + cssString(hostName) + "' i]");
+    }
+    for (const keyword of rules.hardHostKeywords || []) {
+      selectors.push("a[href*='" + cssString(keyword) + "' i]");
+    }
+    return selectors.length ? selectors.join(",") : "a[href]";
+  }
+
+  function cssString(value) {
+    return String(value || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  }
+
+  function uniqueElements(nodes) {
+    const seen = new WeakSet();
+    const results = [];
+    for (const node of nodes) {
+      if (node instanceof Element && !seen.has(node)) {
+        seen.add(node);
+        results.push(node);
+      }
+    }
+    return results;
   }
 
   function neutralizeChapterClickTraps(roots) {
@@ -574,15 +619,34 @@
     }
     const text = trimText(node.textContent);
     const rect = node.getBoundingClientRect();
-    const hasAdName = /(^|[-_\s])(ad|ads|advert|advertisement|sponsor|popup|close)([-_\s]|$)/i.test(node.id + " " + node.className);
+    const hasAdName = looksAdNamed(node);
     const adLabel = (state.pageRules.orphanTextTerms || []).some((term) => text.toLowerCase() === String(term).toLowerCase());
     const closeLabel = /^(x|×|close)$/i.test(text) && (hasAdName || (rect.width <= 64 && rect.height <= 64));
     return text.length <= 80 && (hasAdName || adLabel || closeLabel);
   }
 
+  function looksAdNamed(node) {
+    let current = node;
+    let depth = 0;
+    while (current instanceof HTMLElement && depth < 3) {
+      if (/(^|[-_\s])(ad|ads|advert|advertisement|sponsor|popup|close|notify|notification)([-_\s]|$)/i.test(current.id + " " + current.className)) {
+        return true;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return false;
+  }
+
   function orphanTextReason(node) {
     const text = trimText(node.textContent);
     const lower = text.toLowerCase();
+    if (/content notification/i.test(lower)) {
+      return "content notification";
+    }
+    if (/^cancel$/i.test(text) && looksAdNamed(node)) {
+      return "cancel";
+    }
     for (const term of state.pageRules.orphanTextTerms || []) {
       if (lower === String(term).toLowerCase()) {
         return term;
@@ -837,6 +901,10 @@
     return text.length <= 500 && anchorCount <= 12;
   }
 
+  function isFooterJunkNode(node) {
+    return Boolean(node.closest("footer, [id*='footer' i], [class*='footer' i], [id*='bottom' i], [class*='bottom' i]"));
+  }
+
   function isProtectedChapterNode(node) {
     if (state.pageType !== "chapter" || !(node instanceof Element)) {
       return false;
@@ -895,6 +963,9 @@
     if (state.pageType !== "chapter" || !state.pageRules.clickShieldEnabled) {
       return false;
     }
+    if (shouldSafeNavigateChapterLink(target)) {
+      return true;
+    }
     if (isClickAllowedChapterControl(target)) {
       return false;
     }
@@ -909,12 +980,43 @@
       return Boolean(urlHost && !profiles.profileMatchesHostname(state.profile, urlHost)) || isChapterJunkUrl(url);
     }
 
-    return Boolean(state.pageRules.shieldPlainReaderClicks && isInsideChapterReader(target));
+    return Boolean(state.pageRules.shieldPlainReaderClicks && isInsideChapterReader(target))
+      || Boolean(state.pageRules.shieldPlainChapterClicks && !actionable);
   }
 
   function isFirstPartyUrl(url) {
     const urlHost = heuristics.getUrlHostname(url, location.href);
-    return !urlHost || profiles.profileMatchesHostname(state.profile, urlHost);
+    if (!urlHost) {
+      return !/^(javascript|data|blob):/i.test(String(url || "").trim());
+    }
+    return profiles.profileMatchesHostname(state.profile, urlHost);
+  }
+
+  function shouldSafeNavigateChapterLink(target) {
+    return Boolean(getSafeChapterLink(target));
+  }
+
+  function getSafeChapterLink(target) {
+    if (!state.pageRules.safeNavigateFirstPartyAnchors || !(target instanceof Element)) {
+      return "";
+    }
+    const link = target.closest("a[href]");
+    if (!link) {
+      return "";
+    }
+    const href = link.getAttribute("href") || "";
+    if (/^#/.test(href) || !isFirstPartyUrl(href)) {
+      return "";
+    }
+    try {
+      const parsed = new URL(href, location.href);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return "";
+      }
+      return parsed.href;
+    } catch (error) {
+      return "";
+    }
   }
 
   function isInsideChapterReader(target) {
@@ -1090,6 +1192,7 @@
         opensBlocked: 0,
         duplicateOpenAttemptsBlocked: 0,
         orphanJunkRemoved: 0,
+        footerJunkGroupsRemoved: 0,
         expensiveScansSkipped: 0
       };
       if (Object.values(delta).some((value) => Number(value || 0) > 0)) {

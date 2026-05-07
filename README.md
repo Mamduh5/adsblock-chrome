@@ -97,7 +97,7 @@ These are intentionally not applied to manga image hosts. Chapter cleanup focuse
 
 Chapter pages also get click-trap overlay neutralization. The content script checks bounded changed roots for clickable elements that are fixed/absolute/sticky, large enough to cover the viewport or reader area, near-transparent or empty, or off-site. Clear junk anchors are hidden; riskier page-covering surfaces have pointer events disabled and inline click handlers removed. Diagnostics include `pageType`, `reason`, tag/node summary, host, trigger, and approximate rect.
 
-Stateful click hijacks are handled separately from overlay removal. On chapter pages, a MAIN-world capture listener shields `pointerdown`, `mousedown`, `click`, and `auxclick` before late page handlers can consume them. It blocks off-site/junk action targets and plain delegated clicks on the reader container, and it keeps reporting `clickCount`, `clickSerial`, action source (`window.open`, `anchor.click`, `location.*`, `handler`, or `unknown`), duplicate open attempts, and whether the event happened shortly after a DOM mutation burst. This is meant to catch limited-use rearming behavior where the first few clicks open one scam tab each.
+Stateful click hijacks are handled separately from overlay removal. On chapter pages, a MAIN-world capture listener shields `pointerdown`, `mousedown`, `click`, and `auxclick` before late page handlers can consume them. It blocks off-site/junk action targets, plain delegated clicks on the chapter page, and any off-site `window.open`/location navigation attempted during the guarded click window. First-party chapter links are handled as safe navigations: the original page click is stopped, then the guard navigates to the first-party URL itself. Diagnostics report `clickCount`, `clickSerial`, action source (`window_open`, `anchor_blank`, `anchor_click`, `location_assign`, `location_replace`, `location_href`, `handler`, or `unknown`), duplicate open attempts, and whether the event happened shortly after a DOM mutation burst.
 
 Narrow Mangakakalot reader allowlist:
 
@@ -109,6 +109,8 @@ Narrow Mangakakalot reader allowlist:
 Manga images remain protected from DOM removal, but ordinary clicks on the reader image area are not treated as legitimate controls. That split is intentional: it preserves image loading while preventing delegated page listeners from using a plain reader click to open a scam tab.
 
 Chapter orphan cleanup also removes bounded leftover ad UI such as isolated close buttons, `advertisement` labels, and empty ad-named wrappers after the main junk block has been hidden.
+
+Footer/bottom junk is handled by targeted chapter anchor scans for confirmed junk domains and keywords before the generic bounded anchor scan runs. This helps remove late-page spam groups such as `sunwin28.bz`, OPEN88/Fun88 variants, and `hi88s.com` without repeatedly scanning the full document.
 
 ## Runtime Model
 
@@ -197,7 +199,7 @@ Debug has three practical safety levels:
 - Basic debug: records important blocked actions only.
 - Inspection: records observe-only candidate matches, but DOM work is throttled and events are buffered, coalesced, rate-limited, trimmed, and capped.
 
-The popup perf line reports DOM passes, skipped passes, shielded clicks, blocked opens, orphan UI removed, dropped events, coalesced events, and storage flushes. If these climb quickly while browsing, turn inspection mode off and promote only rules that already have repeated evidence.
+The popup perf line reports DOM passes, skipped passes, shielded clicks, blocked opens, orphan UI removed, footer groups removed, dropped events, coalesced events, and storage flushes. If these climb quickly while browsing, turn inspection mode off and promote only rules that already have repeated evidence.
 
 ## Mangakakalot Tuning Workflow
 
@@ -228,6 +230,6 @@ The MAIN-world `page_guard.js` is intentionally narrow. It runs through `chrome.
 - DNR request counts depend on `declarativeNetRequest.onRuleMatchedDebug`, mainly useful in unpacked/debug builds.
 - Profile selection UI is a placeholder for future management; the active profile is still determined by the current tab hostname.
 - The page-level `window.open` guard runs in MAIN world through `chrome.scripting.registerContentScripts` at `document_start`. It uses bundled profile defaults; custom blocked hosts are handled by isolated content logic and DNR after reconciliation/reload.
-- The MAIN-world navigation guard patches `window.open`, `HTMLAnchorElement.click`, and `location.assign/replace`. Direct assignments such as `window.location.href = ...` are not reliably patchable in MV3 page scripts, so the chapter click shield focuses on stopping the user-click event before delegated hijack handlers run.
+- The MAIN-world navigation guard patches `window.open`, `HTMLAnchorElement.click`, `location.assign/replace`, and attempts to patch the `location.href` setter where Chrome allows it. Direct assignments such as `window.location.href = ...` are not reliably patchable in every MV3 page-world case, so the chapter click shield focuses on stopping the user-click event before delegated hijack handlers run.
 - Observe-only events are best-effort. They come from visible DOM URLs, clicks, opens, storage/cookie scans, and DNR debug feedback; they are not a complete network capture.
 - Mangakakalot heuristics are first-pass and conservative. Real-world tuning should be based on observed request hosts, overlay markup, and cookie/storage names.

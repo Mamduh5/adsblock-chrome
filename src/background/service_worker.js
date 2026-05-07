@@ -36,6 +36,7 @@ const perfCounters = {
   opensBlocked: 0,
   duplicateOpenAttemptsBlocked: 0,
   orphanJunkRemoved: 0,
+  footerJunkGroupsRemoved: 0,
   expensiveScansSkipped: 0
 };
 
@@ -918,6 +919,7 @@ function mergePerfCounters(delta) {
     "opensBlocked",
     "duplicateOpenAttemptsBlocked",
     "orphanJunkRemoved",
+    "footerJunkGroupsRemoved",
     "expensiveScansSkipped"
   ]) {
     perfCounters[key] += Number(delta[key] || 0);

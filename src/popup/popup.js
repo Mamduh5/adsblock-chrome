@@ -300,6 +300,8 @@
       + " opens blocked, "
       + String(perf.orphanJunkRemoved || 0)
       + " orphan UI removed, "
+      + String(perf.footerJunkGroupsRemoved || 0)
+      + " footer groups removed, "
       + String(perf.eventsDropped || 0)
       + " dropped, "
       + String(perf.eventsCoalesced || 0)

@@ -131,6 +131,8 @@
         clickShieldEnabled: rules && rules.clickShieldEnabled !== false,
         clickShieldEvents: normalizeList(rules && rules.clickShieldEvents || ["mousedown", "click", "auxclick"]),
         shieldPlainReaderClicks: rules && rules.shieldPlainReaderClicks !== false,
+        shieldPlainChapterClicks: Boolean(rules && rules.shieldPlainChapterClicks),
+        safeNavigateFirstPartyAnchors: rules && rules.safeNavigateFirstPartyAnchors !== false,
         shieldMutationBurstMs: Number(rules && rules.shieldMutationBurstMs || 1200)
       };
     }

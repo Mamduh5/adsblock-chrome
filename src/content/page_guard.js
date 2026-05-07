@@ -26,6 +26,7 @@
 
   installChapterClickShield(profile);
   patchLocationMethods(profile);
+  patchLocationHref(profile);
 
   function patchWindowOpen(activeProfile) {
     const originalOpen = window.open;
@@ -42,7 +43,7 @@
           }
         }));
       }
-      if (isSuspiciousUrl(activeProfile, url)) {
+      if (shouldBlockNavigation(activeProfile, url)) {
         const attempt = markBlockedOpenAttempt();
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
           detail: {
@@ -50,7 +51,7 @@
             url: String(url || ""),
             target: String(target || ""),
             action: "block",
-            source: "window.open",
+            source: "window_open",
             clickCount: shieldState.clickCount,
             clickSerial: shieldState.clickSerial,
             duplicateAttempt: attempt.duplicateAttempt,
@@ -68,13 +69,13 @@
     const originalClick = HTMLAnchorElement.prototype.click;
     HTMLAnchorElement.prototype.click = function guardedAnchorClick() {
       const href = this.getAttribute("href") || "";
-      if (isGuardedClickWindow(activeProfile) && isSuspiciousUrl(activeProfile, href)) {
+      if (shouldBlockNavigation(activeProfile, href)) {
         const attempt = markBlockedOpenAttempt();
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
           detail: {
             profileId: activeProfile.id,
             action: "block",
-            source: "anchor.click",
+            source: this.getAttribute("target") === "_blank" ? "anchor_blank" : "anchor_click",
             url: String(href || ""),
             host: getUrlHost(href),
             target: String(this.getAttribute("target") || ""),
@@ -132,7 +133,13 @@
 
   function handleChapterShieldEvent(activeProfile, rules, event) {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target || isAllowedReaderControl(rules, target)) {
+    if (!target) {
+      return;
+    }
+
+    const allowed = allowedChapterAction(activeProfile, rules, target);
+    if (allowed.allowed) {
+      handleAllowedChapterAction(activeProfile, rules, event, target, allowed);
       return;
     }
 
@@ -142,15 +149,14 @@
     const junk = url && isPageJunkUrl(activeProfile, url);
     const offsite = url && isOffsiteUrl(activeProfile, url);
     const readerClick = Boolean(rules.shieldPlainReaderClicks && isInsideReaderArea(rules, target));
+    const plainChapterClick = Boolean(rules.shieldPlainChapterClicks && !url);
     const largeSurface = isLargeClickSurface(target);
 
-    if (!junk && !offsite && !readerClick && !largeSurface) {
+    if (!junk && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
       return;
     }
 
-    if (event.type === "pointerdown" || event.type === "mousedown" || (event.type === "click" && Date.now() - shieldState.lastUserClickAt > 500)) {
-      beginClickSequence();
-    }
+    markShieldedClick(event);
     shieldState.lastShieldedAt = Date.now();
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -167,10 +173,47 @@
         afterMutationBurst: isAfterMutationBurst(activeProfile),
         url: String(url || ""),
         host: url ? getUrlHost(url) : "",
-        reason: junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : "large_click_surface",
+        reason: junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
         target: describeElement(target)
       }
     }));
+  }
+
+  function handleAllowedChapterAction(activeProfile, rules, event, target, allowed) {
+    const link = allowed.link;
+    const href = link ? link.getAttribute("href") || "" : "";
+    if (!link || !rules.safeNavigateFirstPartyAnchors) {
+      return;
+    }
+
+    // First-party chapter/control links are navigated by the guard itself.
+    // This preserves real navigation while preventing page-level delegated
+    // click listeners from opening a scam tab off the same user gesture.
+    markShieldedClick(event);
+    shieldState.lastShieldedAt = Date.now();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    event.stopPropagation();
+
+    window.dispatchEvent(new CustomEvent("site-shield-click-shielded", {
+      detail: {
+        profileId: activeProfile.id,
+        action: "allow_safe_navigate",
+        source: "anchor_first_party",
+        eventType: event.type,
+        clickCount: shieldState.clickCount,
+        clickSerial: shieldState.clickSerial,
+        afterMutationBurst: isAfterMutationBurst(activeProfile),
+        url: String(href || ""),
+        host: getUrlHost(href),
+        reason: allowed.reason,
+        target: describeElement(target)
+      }
+    }));
+
+    if (event.type === "click") {
+      safeNavigate(href);
+    }
   }
 
   function patchLocationMethods(activeProfile) {
@@ -184,13 +227,13 @@
         Object.defineProperty(locationPrototype, method, {
           configurable: true,
           value: function guardedLocationChange(url) {
-            if (isGuardedClickWindow(activeProfile) && isSuspiciousUrl(activeProfile, url)) {
+            if (shouldBlockNavigation(activeProfile, url)) {
               const attempt = markBlockedOpenAttempt();
               window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
                 detail: {
                   profileId: activeProfile.id,
                   action: "block",
-                  source: "location." + method,
+                  source: method === "assign" ? "location_assign" : "location_replace",
                   url: String(url || ""),
                   host: getUrlHost(url),
                   clickCount: shieldState.clickCount,
@@ -213,6 +256,51 @@
     }
   }
 
+  function patchLocationHref(activeProfile) {
+    const locationPrototype = Object.getPrototypeOf(window.location);
+    const descriptor = locationPrototype && Object.getOwnPropertyDescriptor(locationPrototype, "href");
+    if (!descriptor || typeof descriptor.set !== "function" || typeof descriptor.get !== "function") {
+      window.dispatchEvent(new CustomEvent("site-shield-location-patch-failed", {
+        detail: { profileId: activeProfile.id, action: "observe", source: "location_href" }
+      }));
+      return;
+    }
+
+    try {
+      Object.defineProperty(locationPrototype, "href", {
+        configurable: true,
+        get: function getGuardedHref() {
+          return descriptor.get.call(this);
+        },
+        set: function setGuardedHref(url) {
+          if (shouldBlockNavigation(activeProfile, url)) {
+            const attempt = markBlockedOpenAttempt();
+            window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
+              detail: {
+                profileId: activeProfile.id,
+                action: "block",
+                source: "location_href",
+                url: String(url || ""),
+                host: getUrlHost(url),
+                clickCount: shieldState.clickCount,
+                clickSerial: shieldState.clickSerial,
+                duplicateAttempt: attempt.duplicateAttempt,
+                openAttemptsForClick: attempt.openAttemptsForClick,
+                afterMutationBurst: isAfterMutationBurst(activeProfile)
+              }
+            }));
+            return undefined;
+          }
+          return descriptor.set.call(this, url);
+        }
+      });
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("site-shield-location-patch-failed", {
+        detail: { profileId: activeProfile.id, action: "observe", source: "location_href" }
+      }));
+    }
+  }
+
   function isGuardedClickWindow(activeProfile) {
     const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)];
     const burstMs = Number(rules && rules.shieldMutationBurstMs || 1200);
@@ -232,6 +320,12 @@
     shieldState.lastUserClickAt = Date.now();
   }
 
+  function markShieldedClick(event) {
+    if (event.type === "pointerdown" || event.type === "mousedown" || (event.type === "click" && Date.now() - shieldState.lastUserClickAt > 500)) {
+      beginClickSequence();
+    }
+  }
+
   function markBlockedOpenAttempt() {
     if (Date.now() - shieldState.lastUserClickAt > 1500) {
       shieldState.openAttemptsForClick = 0;
@@ -243,22 +337,29 @@
     };
   }
 
-  function isAllowedReaderControl(rules, target) {
+  function allowedChapterAction(activeProfile, rules, target) {
     for (const selector of rules.clickAllowSelectors || []) {
       try {
         if (target.closest(selector)) {
-          return true;
+          const link = target.closest("a[href]");
+          if (link && isFirstPartyUrl(link.getAttribute("href") || "")) {
+            return { allowed: true, link, reason: "allowlisted_first_party_control" };
+          }
+          return { allowed: true, link: null, reason: "allowlisted_control" };
         }
       } catch (error) {
-        return false;
+        return { allowed: false, link: null, reason: "" };
       }
     }
     const link = target.closest("a[href]");
     if (!link) {
-      return false;
+      return { allowed: false, link: null, reason: "" };
     }
     const href = link.getAttribute("href") || "";
-    return /^#/.test(href) || /\/manga\/[^/]+\/chapter-/i.test(href) || isFirstPartyUrl(href);
+    if (/^#/.test(href) || /\/manga\/[^/]+\/chapter-/i.test(href) || isFirstPartyUrl(href)) {
+      return { allowed: true, link, reason: "first_party_link" };
+    }
+    return { allowed: false, link: null, reason: "" };
   }
 
   function isInsideReaderArea(rules, target) {
@@ -298,9 +399,37 @@
     return Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
   }
 
+  function shouldBlockNavigation(activeProfile, url) {
+    return isSuspiciousUrl(activeProfile, url)
+      || (isGuardedClickWindow(activeProfile) && isOffsiteUrl(activeProfile, url));
+  }
+
   function isFirstPartyUrl(url) {
     const host = getUrlHost(url);
-    return !host || profiles.profileMatchesHostname(profile, host);
+    if (!host) {
+      return !/^(javascript|data|blob):/i.test(String(url || "").trim());
+    }
+    return profiles.profileMatchesHostname(profile, host);
+  }
+
+  function safeNavigate(url) {
+    try {
+      if (!url || /^#/.test(url)) {
+        return;
+      }
+      const parsed = new URL(String(url), location.href);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return;
+      }
+      if (parsed.href === location.href) {
+        return;
+      }
+      window.setTimeout(() => {
+        window.location.assign(parsed.href);
+      }, 0);
+    } catch (error) {
+      return;
+    }
   }
 
   function getUrlHost(url) {

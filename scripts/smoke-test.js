@@ -115,6 +115,9 @@ vm.runInContext(
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");
+  assert.strictEqual(profile.pageRules.chapter.shieldPlainChapterClicks, true, "chapter shield should cover plain chapter clicks");
+  assert.strictEqual(profile.pageRules.chapter.safeNavigateFirstPartyAnchors, true, "chapter shield should safe-navigate first-party anchors");
+  assert(profile.pageRules.chapter.orphanTextTerms.includes("content notification"), "chapter rules should include content notification cleanup");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
 
   const activated = await internals.activateProfile("mangakakalot", false);
