@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Site Shield",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local-only, profile-based site shield for selected desktop Chrome sites.",
   "permissions": [
     "alarms",

@@ -13,6 +13,7 @@ const heuristics = self.SiteShieldHeuristics;
 const DEFAULT_GLOBAL_SETTINGS = {
   enabled: true,
   debug: false,
+  inspectionMode: false,
   activatedProfileIds: config.DEFAULT_ACTIVATED_PROFILE_IDS.slice(),
   profiles: {}
 };
@@ -51,11 +52,14 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     }
 
     incrementStats(profile.id, { blockedRequests: 1 });
-    recordEvent(profile.id, config.EVENT_CATEGORIES.DNR_BLOCK, "Request blocked", {
+    recordEvent(profile.id, config.EVENT_CATEGORIES.NETWORK, "Request blocked", {
+      action: "block",
+      source: "dnr",
       ruleId: event.rule.ruleId,
       url: event.request.url,
+      requestHost: heuristics.getUrlHostname(event.request.url),
       resourceType: event.request.type
-    });
+    }, { pageUrl: initiator || event.request.documentUrl || "" });
   });
 }
 
@@ -97,6 +101,7 @@ async function handleMessage(message, sender) {
       permissionGranted,
       enabled: Boolean(profile && settings.enabled && profileSettings.enabled && activated && permissionGranted),
       debug: settings.debug,
+      inspectionMode: settings.inspectionMode,
       profile,
       settings: profileSettings,
       globalSettings: settings
@@ -114,6 +119,7 @@ async function handleMessage(message, sender) {
       inScope: Boolean(profile),
       enabled: settings.enabled,
       debug: settings.debug,
+      inspectionMode: settings.inspectionMode,
       profile,
       activatedProfileIds: settings.activatedProfileIds,
       profiles: await buildProfileRuntimeSummaries(settings),
@@ -184,6 +190,16 @@ async function handleMessage(message, sender) {
     return { ok: true, settings };
   }
 
+  if (type === "setInspectionMode") {
+    const settings = await getSettings();
+    settings.inspectionMode = Boolean(message.inspectionMode);
+    if (settings.inspectionMode) {
+      settings.debug = true;
+    }
+    await saveSettings(settings);
+    return { ok: true, settings };
+  }
+
   if (type === "saveCustomHosts") {
     const settings = await getSettings();
     const profile = profiles.getById(message.profileId);
@@ -222,7 +238,9 @@ async function handleMessage(message, sender) {
   if (type === "recordEvent") {
     const profile = profiles.getById(message.profileId) || profileFromHostname(message.hostname || getSenderHost(sender));
     if (profile) {
-      await recordEvent(profile.id, message.category, message.summary, message.details || {});
+      await recordEvent(profile.id, message.category, message.summary, message.details || {}, {
+        pageUrl: message.pageUrl || sender && sender.url || ""
+      });
     }
     return { ok: true };
   }
@@ -238,12 +256,16 @@ async function handleMessage(message, sender) {
       return { ok: false, error: "Unknown profile" };
     }
     const result = await scrubSuspiciousCookies(profile, "manual-popup");
-    await recordEvent(profile.id, config.EVENT_CATEGORIES.MANUAL_SCRUB, "Manual cookie scrub", result);
+    await recordEvent(profile.id, config.EVENT_CATEGORIES.MANUAL, "Manual cookie scrub", Object.assign({ action: "scrub" }, result));
     return { ok: true, result };
   }
 
   if (type === "getRecentEvents") {
     return { ok: true, events: await getRecentEvents(message.profileId || "") };
+  }
+
+  if (type === "getDebugSnapshot") {
+    return { ok: true, snapshot: await buildDebugSnapshot(message.profileId || "", message.hostname || "") };
   }
 
   return { ok: false, error: "Unknown message type: " + type };
@@ -280,6 +302,10 @@ async function saveSettings(settings) {
   const normalized = Object.assign({}, DEFAULT_GLOBAL_SETTINGS, settings);
   normalized.enabled = Boolean(normalized.enabled);
   normalized.debug = Boolean(normalized.debug);
+  normalized.inspectionMode = Boolean(normalized.inspectionMode);
+  if (normalized.inspectionMode) {
+    normalized.debug = true;
+  }
   normalized.activatedProfileIds = normalizeActivatedProfileIds(normalized.activatedProfileIds);
   normalized.profiles = normalized.profiles || {};
 
@@ -515,6 +541,17 @@ async function scrubSuspiciousCookies(profile, reason) {
   let deleted = 0;
 
   for (const cookie of cookies) {
+    if (settings.inspectionMode && heuristics.isCandidateCookieName(profile, cookie.name)) {
+      await recordEvent(profile.id, config.EVENT_CATEGORIES.COOKIE, "Candidate cookie observed", {
+        action: "observe",
+        reason,
+        name: cookie.name,
+        domain: cookie.domain,
+        path: cookie.path
+      });
+      continue;
+    }
+
     if (!heuristics.shouldScrubCookieName(profile, cookie.name)) {
       continue;
     }
@@ -528,7 +565,8 @@ async function scrubSuspiciousCookies(profile, reason) {
       storeId: cookie.storeId
     });
     deleted += 1;
-    await recordEvent(profile.id, config.EVENT_CATEGORIES.COOKIE_REMOVE, "Cookie removed", {
+    await recordEvent(profile.id, config.EVENT_CATEGORIES.COOKIE, "Cookie removed", {
+      action: "block",
       reason,
       name: cookie.name,
       domain: cookie.domain,
@@ -611,7 +649,7 @@ function emptyStats() {
   };
 }
 
-async function recordEvent(profileId, category, summary, details) {
+async function recordEvent(profileId, category, summary, details, context) {
   const settings = await getSettings();
   if (!settings.debug) {
     return;
@@ -625,12 +663,69 @@ async function recordEvent(profileId, category, summary, details) {
     profileId,
     category,
     summary: summary || category,
+    pageUrl: context && context.pageUrl || "",
+    pageHost: heuristics.getUrlHostname(context && context.pageUrl || ""),
     details: details || {}
   });
 
   await chrome.storage.local.set({
     [config.RECENT_EVENTS_KEY]: events.slice(0, config.MAX_RECENT_EVENTS)
   });
+}
+
+async function buildDebugSnapshot(profileId, hostname) {
+  const manifest = chrome.runtime.getManifest ? chrome.runtime.getManifest() : { version: "unknown" };
+  const settings = await getSettings();
+  const profile = profiles.getById(profileId) || profileFromHostname(hostname);
+  const profileSummaries = await buildProfileRuntimeSummaries(settings);
+  const registeredScripts = await chrome.scripting.getRegisteredContentScripts();
+  const stats = profile ? await getStats(profile.id) : emptyStats();
+  const events = profile ? await getRecentEvents(profile.id) : await getRecentEvents("");
+  const permissionSummary = [];
+
+  for (const knownProfile of profiles.all()) {
+    permissionSummary.push({
+      profileId: knownProfile.id,
+      granted: await hasProfileHostPermission(knownProfile),
+      origins: knownProfile.hostPermissionPatterns
+    });
+  }
+
+  return {
+    extension: {
+      name: manifest.name || "Site Shield",
+      version: manifest.version || "unknown"
+    },
+    activeProfileId: profile ? profile.id : "",
+    debug: settings.debug,
+    inspectionMode: settings.inspectionMode,
+    activatedProfileIds: settings.activatedProfileIds,
+    permissions: permissionSummary,
+    registeredContentScripts: registeredScripts
+      .filter((script) => isManagedContentScriptId(script.id))
+      .map((script) => ({
+        id: script.id,
+        matches: script.matches,
+        world: script.world || "ISOLATED",
+        runAt: script.runAt
+      })),
+    counters: stats,
+    recentEvents: events.slice(0, 25),
+    profiles: profileSummaries,
+    profileSettings: profile ? getProfileSettings(settings, profile.id) : null,
+    profileTuningSummary: profile ? {
+      id: profile.id,
+      hardBlockHosts: profile.hardBlockHosts,
+      candidateBlockHosts: profile.candidateBlockHosts,
+      hardDomSelectors: profile.hardDomSelectors,
+      candidateDomSelectors: profile.candidateDomSelectors,
+      suspiciousStorageKeyTerms: profile.suspiciousStorageKeyTerms,
+      suspiciousCookieKeyTerms: profile.suspiciousCookieKeyTerms,
+      protectedCookieTerms: profile.protectedCookieTerms,
+      pageGuard: profile.pageGuard,
+      tuning: profile.tuning
+    } : null
+  };
 }
 
 async function getRecentEvents(profileId) {
@@ -654,7 +749,11 @@ function profileSummary(profile) {
     description: profile.description,
     domains: profile.domains,
     matchPatterns: profile.matchPatterns,
-    hostPermissionPatterns: profile.hostPermissionPatterns
+    hostPermissionPatterns: profile.hostPermissionPatterns,
+    hardBlockHosts: profile.hardBlockHosts,
+    candidateBlockHosts: profile.candidateBlockHosts,
+    hardDomSelectors: profile.hardDomSelectors,
+    candidateDomSelectors: profile.candidateDomSelectors
   };
 }
 
@@ -689,6 +788,10 @@ async function activateProfile(profileId, requestPermission) {
   if (!permissionGranted) {
     await reconcileContentScripts(settings);
     await reconcileNetworkRules(settings);
+    await recordEvent(profile.id, config.EVENT_CATEGORIES.PERMISSION, "Profile activation blocked by missing permission", {
+      action: "observe",
+      origins: profile.hostPermissionPatterns
+    });
     return { activated: false, permissionGranted, unavailableReason: "Host permission is not granted." };
   }
 
@@ -698,6 +801,10 @@ async function activateProfile(profileId, requestPermission) {
   await saveSettings(settings);
   await reconcileContentScripts(settings);
   await reconcileNetworkRules(settings);
+  await recordEvent(profile.id, config.EVENT_CATEGORIES.PROFILE, "Profile activated", {
+    action: "activate",
+    origins: profile.hostPermissionPatterns
+  });
   return { activated: true, permissionGranted };
 }
 
@@ -712,6 +819,9 @@ async function deactivateProfile(profileId) {
   await saveSettings(settings);
   await reconcileContentScripts(settings);
   await reconcileNetworkRules(settings);
+  await recordEvent(profile.id, config.EVENT_CATEGORIES.PROFILE, "Profile deactivated", {
+    action: "deactivate"
+  });
   return { activated: false, permissionGranted: await hasProfileHostPermission(profile) };
 }
 
@@ -742,6 +852,7 @@ function getSenderHost(sender) {
 self.SiteShieldBackgroundInternals = {
   activateProfile,
   buildAllDynamicRules,
+  buildDebugSnapshot,
   buildProfileRuntimeSummaries,
   contentScriptRegistrationsForProfile,
   deactivateProfile,

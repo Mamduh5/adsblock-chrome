@@ -26,6 +26,7 @@ const context = {
   self: null,
   chrome: {
     runtime: {
+      getManifest: () => ({ name: "Site Shield", version: "0.2.0-test" }),
       onInstalled: createEvent(),
       onStartup: createEvent(),
       onMessage: createEvent()
@@ -115,6 +116,11 @@ vm.runInContext(
   assert(pageGuard, "page guard should register");
   assert.strictEqual(pageGuard.world, "MAIN", "page guard must run in MAIN world");
   assert(pageGuard.runAt === "document_start", "page guard should run at document_start");
+
+  const snapshot = await internals.buildDebugSnapshot("mangakakalot", "mangakakalot.gg");
+  assert.strictEqual(snapshot.activeProfileId, "mangakakalot", "snapshot should include active profile");
+  assert(Array.isArray(snapshot.profileTuningSummary.hardBlockHosts), "snapshot should include hard hosts");
+  assert(Array.isArray(snapshot.profileTuningSummary.candidateBlockHosts), "snapshot should include candidate hosts");
 
   await internals.deactivateProfile("mangakakalot");
   assert.strictEqual(registeredScripts.length, 0, "deactivation should unregister managed scripts");

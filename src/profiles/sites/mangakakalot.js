@@ -28,7 +28,7 @@
       2,
       3
     ],
-    staticBlockedHosts: [
+    hardBlockHosts: [
       "ad-maven.com",
       "adnxs.com",
       "adservice.google.com",
@@ -53,8 +53,20 @@
       "shorte.st",
       "tinyium.com"
     ],
+    candidateBlockHosts: [
+      "adskeeper.com",
+      "adclick.g.doubleclick.net",
+      "bidvertiser.com",
+      "hilltopads.net",
+      "juicyads.com",
+      "popcash.net",
+      "push-notifications.top",
+      "revcontent.com",
+      "trafficstars.com"
+    ],
+    staticBlockedHosts: [],
     dynamicBlockedHosts: [],
-    suspiciousDomSelectors: [
+    hardDomSelectors: [
       "[id*='ad-overlay' i]",
       "[class*='ad-overlay' i]",
       "[id*='popup' i]",
@@ -70,6 +82,19 @@
       "iframe[src*='popads.net' i]",
       "iframe[src*='propellerads.com' i]"
     ],
+    candidateDomSelectors: [
+      "[id*='banner' i]",
+      "[class*='banner' i]",
+      "[id*='sponsor' i]",
+      "[class*='sponsor' i]",
+      "[id*='ads' i]",
+      "[class*='ads' i]",
+      "[id*='advert' i]",
+      "[class*='advert' i]",
+      "a[target='_blank'][href*='?']",
+      "div[onclick]"
+    ],
+    suspiciousDomSelectors: [],
     suspiciousTextTerms: [
       "close",
       "continue",
@@ -96,6 +121,14 @@
       "clicktrap",
       "sponsor"
     ],
+    candidateStorageKeyTerms: [
+      "banner",
+      "push",
+      "track",
+      "tracker",
+      "utm",
+      "zone"
+    ],
     suspiciousCookieKeyTerms: [
       "ad",
       "ads",
@@ -108,6 +141,14 @@
       "campaign",
       "clicktrap",
       "sponsor"
+    ],
+    candidateCookieKeyTerms: [
+      "banner",
+      "push",
+      "track",
+      "tracker",
+      "utm",
+      "zone"
     ],
     protectedCookieTerms: [
       "auth",

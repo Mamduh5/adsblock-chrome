@@ -224,13 +224,24 @@ textarea {
 }
 
 #recentEvents {
-  max-height: 120px;
+  max-height: 170px;
   margin: 0;
   padding-left: 18px;
   overflow: auto;
   color: #39434f;
   font-size: 12px;
   line-height: 1.35;
+}
+
+#recentEvents li {
+  margin-bottom: 7px;
+}
+
+#recentEvents strong {
+  display: inline-block;
+  margin-right: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 #recentEvents:empty::before {
@@ -243,7 +254,8 @@ textarea {
 }
 
 footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 

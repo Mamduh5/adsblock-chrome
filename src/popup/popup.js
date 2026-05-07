@@ -10,11 +10,13 @@
     globalEnabledToggle: document.getElementById("globalEnabledToggle"),
     profileEnabledToggle: document.getElementById("profileEnabledToggle"),
     debugToggle: document.getElementById("debugToggle"),
+    inspectionToggle: document.getElementById("inspectionToggle"),
     customHosts: document.getElementById("customHosts"),
     customSelectors: document.getElementById("customSelectors"),
     saveButton: document.getElementById("saveButton"),
     scrubButton: document.getElementById("scrubButton"),
     resetButton: document.getElementById("resetButton"),
+    copyDebugButton: document.getElementById("copyDebugButton"),
     message: document.getElementById("message"),
     blockedRequests: document.getElementById("blockedRequests"),
     removedOverlays: document.getElementById("removedOverlays"),
@@ -30,9 +32,11 @@
   elements.globalEnabledToggle.addEventListener("change", onGlobalEnabledChanged);
   elements.profileEnabledToggle.addEventListener("change", onProfileEnabledChanged);
   elements.debugToggle.addEventListener("change", onDebugChanged);
+  elements.inspectionToggle.addEventListener("change", onInspectionChanged);
   elements.saveButton.addEventListener("click", onSave);
   elements.scrubButton.addEventListener("click", onScrub);
   elements.resetButton.addEventListener("click", onReset);
+  elements.copyDebugButton.addEventListener("click", onCopyDebug);
 
   async function initialize() {
     const tab = await getActiveTab();
@@ -60,6 +64,7 @@
     elements.profileId.textContent = state.profile ? state.profile.id : "out-of-scope";
     elements.globalEnabledToggle.checked = Boolean(state.enabled);
     elements.debugToggle.checked = Boolean(state.debug);
+    elements.inspectionToggle.checked = Boolean(state.inspectionMode);
     elements.profileEnabledToggle.checked = Boolean(state.settings && state.settings.enabled);
     elements.customHosts.value = state.settings ? (state.settings.customBlockedHosts || []).join("\n") : "";
     elements.customSelectors.value = state.settings ? (state.settings.customSelectors || []).join("\n") : "";
@@ -93,9 +98,9 @@
         profile.id,
         profile.activated ? "activated" : "not activated",
         profile.permissionGranted ? "permission granted" : "permission missing"
-      ].join(" · ");
+      ].join(" | ");
       if (profile.unavailableReason) {
-        meta.textContent += " · " + profile.unavailableReason;
+        meta.textContent += " | " + profile.unavailableReason;
       }
       detail.appendChild(title);
       detail.appendChild(meta);
@@ -167,6 +172,12 @@
     await refreshState();
   }
 
+  async function onInspectionChanged() {
+    const response = await sendMessage({ type: "setInspectionMode", inspectionMode: elements.inspectionToggle.checked });
+    setMessage(response && response.ok ? "Inspection mode saved. Browse and watch recent events." : "Unable to save inspection mode.");
+    await refreshState();
+  }
+
   async function onSave() {
     if (!currentProfileId) {
       setMessage("No matched profile for this tab.");
@@ -215,6 +226,29 @@
     }
   }
 
+  async function onCopyDebug() {
+    const response = await sendMessage({
+      type: "getDebugSnapshot",
+      profileId: currentProfileId,
+      hostname: currentHost
+    });
+
+    if (!response || !response.ok) {
+      setMessage("Unable to build debug snapshot.");
+      return;
+    }
+
+    const text = JSON.stringify(response.snapshot, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("Debug snapshot copied.");
+    } catch (error) {
+      setMessage("Clipboard failed; snapshot logged to extension console.");
+      console.info("[Site Shield] debug snapshot", response.snapshot);
+    }
+  }
+
+
   function setScopedControls(inScope) {
     elements.profileEnabledToggle.disabled = !inScope;
     elements.customHosts.disabled = !inScope;
@@ -222,6 +256,7 @@
     elements.saveButton.disabled = !inScope;
     elements.scrubButton.disabled = !inScope;
     elements.resetButton.disabled = !inScope;
+    elements.copyDebugButton.disabled = !inScope;
   }
 
   function setCounters(stats) {
@@ -237,10 +272,31 @@
       const item = document.createElement("li");
       const category = document.createElement("code");
       category.textContent = event.category;
+      const action = document.createElement("strong");
+      action.textContent = event.details && event.details.action || "event";
+      item.appendChild(action);
       item.appendChild(category);
       item.appendChild(document.createTextNode(" " + event.summary));
+      const context = eventContext(event);
+      if (context) {
+        item.appendChild(document.createElement("br"));
+        item.appendChild(document.createTextNode(context));
+      }
       elements.recentEvents.appendChild(item);
     }
+  }
+
+  function eventContext(event) {
+    const details = event.details || {};
+    return [
+      details.requestHost || details.urlHost || "",
+      details.selector || "",
+      details.node || "",
+      details.key || details.name || "",
+      details.domain ? details.domain + (details.path || "") : "",
+      details.url || "",
+      event.pageHost || ""
+    ].filter(Boolean).join(" | ").slice(0, 220);
   }
 
   function splitLines(value) {

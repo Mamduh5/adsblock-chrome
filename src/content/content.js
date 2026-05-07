@@ -8,10 +8,12 @@
   const state = {
     enabled: false,
     debug: false,
+    inspectionMode: false,
     profile: profiles.findByHostname(host),
     customBlockedHosts: [],
     customSelectors: [],
     removedNodes: new WeakSet(),
+    observedEventKeys: new Set(),
     observer: null,
     cleanupQueued: false,
     pageGuardListenerInstalled: false
@@ -28,6 +30,7 @@
 
     state.enabled = true;
     state.debug = Boolean(response.debug);
+    state.inspectionMode = Boolean(response.inspectionMode);
     state.profile = response.profile;
     state.customBlockedHosts = response.settings.customBlockedHosts || [];
     state.customSelectors = response.settings.customSelectors || [];
@@ -58,8 +61,13 @@
     state.pageGuardListenerInstalled = true;
     window.addEventListener("site-shield-open-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
-      recordEvent(config.EVENT_CATEGORIES.OPEN_BLOCK, "window.open blocked", event.detail || {});
+      recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
+    });
+    window.addEventListener("site-shield-open-observed", (event) => {
+      if (state.inspectionMode) {
+        recordEvent(config.EVENT_CATEGORIES.OPEN, "Candidate window.open observed", Object.assign({ action: "observe" }, event.detail || {}), "open:" + (event.detail && event.detail.url || ""));
+      }
     });
   }
 
@@ -84,13 +92,24 @@
         || actionable.getAttribute("data-url")
         || "";
 
+      if (state.inspectionMode && candidateUrl && isCandidateUrl(candidateUrl)) {
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Candidate click URL observed", {
+          action: "observe",
+          url: candidateUrl,
+          urlHost: heuristics.getUrlHostname(candidateUrl, location.href),
+          text: trimText(actionable.textContent)
+        });
+      }
+
       // Capture-phase click defense: block javascript: links, known bad hosts,
       // profile/custom blocked hosts, and redirector URLs with external targets.
       if (heuristics.isSuspiciousUrl(state.profile, candidateUrl, state.customBlockedHosts, location.href)) {
         stopEvent(event);
         incrementStats({ blockedRedirects: 1 });
-        recordEvent(config.EVENT_CATEGORIES.CLICK_BLOCK, "Click navigation blocked", {
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Click navigation blocked", {
+          action: "block",
           url: candidateUrl,
+          urlHost: heuristics.getUrlHostname(candidateUrl, location.href),
           text: trimText(actionable.textContent)
         });
         debugLog("click-blocked", { url: candidateUrl, text: actionable.textContent });
@@ -102,7 +121,8 @@
         stopEvent(event);
         hideNode(overlay, "trap-click-overlay");
         incrementStats({ blockedRedirects: 1, removedOverlays: 1 });
-        recordEvent(config.EVENT_CATEGORIES.CLICK_BLOCK, "Trap overlay click blocked", {
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Trap overlay click blocked", {
+          action: "block",
           node: describeNode(overlay),
           text: trimText(actionable.textContent)
         });
@@ -138,6 +158,9 @@
     removed += removeBySelectors();
     removed += removeSuspiciousIframes();
     removed += removeOverlayCandidates();
+    if (state.inspectionMode) {
+      observePageUrls();
+    }
 
     if (removed > 0) {
       document.documentElement.classList.add("site-shield-scroll-unlocked");
@@ -147,7 +170,7 @@
 
   function removeBySelectors() {
     let removed = 0;
-    const selectors = (state.profile.suspiciousDomSelectors || []).concat(state.customSelectors);
+    const selectors = (state.profile.hardDomSelectors || state.profile.suspiciousDomSelectors || []).concat(state.customSelectors);
 
     for (const selector of heuristics.safeSelectorList(selectors)) {
       let nodes;
@@ -166,7 +189,34 @@
       }
     }
 
+    if (state.inspectionMode) {
+      observeCandidateSelectors();
+    }
+
     return removed;
+  }
+
+  function observeCandidateSelectors() {
+    for (const selector of heuristics.safeSelectorList(state.profile.candidateDomSelectors || [])) {
+      let nodes;
+      try {
+        nodes = document.querySelectorAll(selector);
+      } catch (error) {
+        debugLog("invalid-candidate-selector", { selector });
+        continue;
+      }
+
+      for (const node of Array.from(nodes).slice(0, 10)) {
+        if (node instanceof HTMLElement) {
+          recordEvent(config.EVENT_CATEGORIES.DOM, "Candidate selector matched", {
+            action: "observe",
+            selector,
+            node: describeNode(node),
+            text: trimText(node.textContent)
+          }, "selector:" + selector + ":" + describeNode(node));
+        }
+      }
+    }
   }
 
   function shouldHideSelectorMatch(node) {
@@ -183,12 +233,50 @@
     let removed = 0;
     for (const frame of document.querySelectorAll("iframe")) {
       const src = frame.getAttribute("src") || "";
+      if (state.inspectionMode && isCandidateUrl(src)) {
+        recordEvent(config.EVENT_CATEGORIES.NETWORK, "Candidate iframe host observed", {
+          action: "observe",
+          url: src,
+          urlHost: heuristics.getUrlHostname(src, location.href),
+          node: describeNode(frame)
+        }, "iframe:" + src);
+      }
       if (heuristics.isSuspiciousUrl(state.profile, src, state.customBlockedHosts, location.href)) {
         hideNode(frame, "suspicious-iframe");
         removed += 1;
       }
     }
     return removed;
+  }
+
+  function observePageUrls() {
+    const nodes = document.querySelectorAll("a[href], iframe[src], script[src], img[src], link[href]");
+    for (const node of Array.from(nodes).slice(0, 200)) {
+      const url = node.getAttribute("href") || node.getAttribute("src") || "";
+      if (!url) {
+        continue;
+      }
+      const urlHost = heuristics.getUrlHostname(url, location.href);
+      if (!urlHost) {
+        continue;
+      }
+
+      if (isCandidateUrl(url)) {
+        recordEvent(config.EVENT_CATEGORIES.NETWORK, "Candidate resource URL observed", {
+          action: "observe",
+          url,
+          urlHost,
+          node: describeNode(node)
+        }, "candidate-url:" + url);
+      } else if (heuristics.isSuspiciousUrl(state.profile, url, state.customBlockedHosts, location.href)) {
+        recordEvent(config.EVENT_CATEGORIES.NETWORK, "Blocking URL heuristic matched", {
+          action: "block",
+          url,
+          urlHost,
+          node: describeNode(node)
+        }, "block-url:" + url);
+      }
+    }
   }
 
   function removeOverlayCandidates() {
@@ -215,6 +303,13 @@
       if (hasTrapText || hasSuspiciousClass || hasBadFrame) {
         hideNode(node, "overlay-heuristic");
         removed += 1;
+      } else if (state.inspectionMode) {
+        recordEvent(config.EVENT_CATEGORIES.DOM, "Overlay-shaped node observed", {
+          action: "observe",
+          node: describeNode(node),
+          zIndex: style.zIndex,
+          text: trimText(text)
+        }, "overlay:" + describeNode(node));
       }
     }
 
@@ -263,7 +358,8 @@
     state.removedNodes.add(node);
     node.setAttribute("data-site-shield-hidden", "true");
     node.setAttribute("aria-hidden", "true");
-    recordEvent(config.EVENT_CATEGORIES.DOM_REMOVE, "DOM node hidden", {
+    recordEvent(config.EVENT_CATEGORIES.DOM, "DOM node hidden", {
+      action: "block",
       reason,
       node: describeNode(node)
     });
@@ -291,7 +387,20 @@
     }
 
     for (const key of keys) {
-      if (!key || !heuristics.shouldScrubStorageKey(state.profile, key)) {
+      if (!key) {
+        continue;
+      }
+
+      if (state.inspectionMode && heuristics.isCandidateStorageKey(state.profile, key)) {
+        recordEvent(config.EVENT_CATEGORIES.STORAGE, "Candidate storage key observed", {
+          action: "observe",
+          area: label,
+          key
+        }, "storage:" + label + ":" + key);
+        continue;
+      }
+
+      if (!heuristics.shouldScrubStorageKey(state.profile, key)) {
         continue;
       }
 
@@ -300,7 +409,7 @@
       try {
         storageArea.removeItem(key);
         deleted += 1;
-        recordEvent(config.EVENT_CATEGORIES.STORAGE_REMOVE, "Storage key removed", { area: label, key });
+        recordEvent(config.EVENT_CATEGORIES.STORAGE, "Storage key removed", { action: "block", area: label, key });
         debugLog("storage-key-deleted", { label, key });
       } catch (error) {
         debugLog("storage-delete-failed", { label, key, error: String(error) });
@@ -322,14 +431,21 @@
     chrome.runtime.sendMessage({ type: "incrementStats", profileId: state.profile.id, hostname: host, delta });
   }
 
-  function recordEvent(category, summary, details) {
+  function recordEvent(category, summary, details, dedupeKey) {
+    if (dedupeKey) {
+      if (state.observedEventKeys.has(dedupeKey)) {
+        return;
+      }
+      state.observedEventKeys.add(dedupeKey);
+    }
     chrome.runtime.sendMessage({
       type: "recordEvent",
       profileId: state.profile.id,
       hostname: host,
       category,
       summary,
-      details
+      details,
+      pageUrl: location.href
     });
   }
 
@@ -347,5 +463,10 @@
 
   function trimText(text) {
     return String(text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+  }
+
+  function isCandidateUrl(url) {
+    const host = heuristics.getUrlHostname(url, location.href);
+    return host && heuristics.isCandidateHost(state.profile, host);
   }
 })();

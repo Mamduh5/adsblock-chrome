@@ -19,12 +19,23 @@
     window.open = function guardedWindowOpen(url, target, features) {
       // Registered dynamically with world: "MAIN", so this runs in the page
       // execution world and can patch page globals such as window.open.
+      if (isCandidateUrl(activeProfile, url)) {
+        window.dispatchEvent(new CustomEvent("site-shield-open-observed", {
+          detail: {
+            profileId: activeProfile.id,
+            url: String(url || ""),
+            target: String(target || ""),
+            action: "observe"
+          }
+        }));
+      }
       if (isSuspiciousUrl(activeProfile, url)) {
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
           detail: {
             profileId: activeProfile.id,
             url: String(url || ""),
-            target: String(target || "")
+            target: String(target || ""),
+            action: "block"
           }
         }));
         return null;
@@ -49,6 +60,19 @@
       return Boolean(activeProfile.pageGuard && activeProfile.pageGuard.blockRedirectorUrls)
         && urlHasRedirectTerm(parsed, activeProfile.tuning && activeProfile.tuning.redirectUrlTerms)
         && Array.from(parsed.searchParams.values()).some((value) => /^https?:\/\//i.test(value));
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isCandidateUrl(activeProfile, url) {
+    const rawUrl = String(url || "").trim();
+    if (!rawUrl) {
+      return false;
+    }
+    try {
+      const parsed = new URL(rawUrl, location.href);
+      return heuristics.isCandidateHost(activeProfile, parsed.hostname);
     } catch (error) {
       return false;
     }

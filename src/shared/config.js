@@ -34,13 +34,15 @@
       "xmlhttprequest"
     ],
     EVENT_CATEGORIES: {
-      DNR_BLOCK: "dnr_block",
-      CLICK_BLOCK: "click_block",
-      OPEN_BLOCK: "open_block",
-      DOM_REMOVE: "dom_remove",
-      STORAGE_REMOVE: "storage_remove",
-      COOKIE_REMOVE: "cookie_remove",
-      MANUAL_SCRUB: "manual_scrub"
+      NETWORK: "network",
+      DOM: "dom",
+      STORAGE: "storage",
+      COOKIE: "cookie",
+      CLICK: "click",
+      OPEN: "open",
+      PERMISSION: "permission",
+      PROFILE: "profile",
+      MANUAL: "manual"
     }
   };
 })(typeof globalThis !== "undefined" ? globalThis : self);

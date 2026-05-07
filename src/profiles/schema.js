@@ -11,12 +11,18 @@
     includeSubdomains: false,
     dnrInitiatorDomains: [],
     staticRuleIds: [],
+    hardBlockHosts: [],
+    candidateBlockHosts: [],
     staticBlockedHosts: [],
     dynamicBlockedHosts: [],
+    hardDomSelectors: [],
+    candidateDomSelectors: [],
     suspiciousDomSelectors: [],
     suspiciousTextTerms: [],
     suspiciousStorageKeyTerms: [],
+    candidateStorageKeyTerms: [],
     suspiciousCookieKeyTerms: [],
+    candidateCookieKeyTerms: [],
     protectedCookieTerms: [],
     pageGuard: {
       patchWindowOpen: false,
@@ -69,12 +75,18 @@
     merged.staticRuleIds = (merged.staticRuleIds || [])
       .map((ruleId) => Number(ruleId))
       .filter((ruleId) => Number.isInteger(ruleId) && ruleId > 0);
-    merged.staticBlockedHosts = normalizeHostList(merged.staticBlockedHosts);
+    merged.hardBlockHosts = normalizeHostList(merged.hardBlockHosts.length ? merged.hardBlockHosts : merged.staticBlockedHosts);
+    merged.candidateBlockHosts = normalizeHostList(merged.candidateBlockHosts);
+    merged.staticBlockedHosts = normalizeHostList(merged.staticBlockedHosts.length ? merged.staticBlockedHosts : merged.hardBlockHosts);
     merged.dynamicBlockedHosts = normalizeHostList(merged.dynamicBlockedHosts);
-    merged.suspiciousDomSelectors = normalizeList(merged.suspiciousDomSelectors);
+    merged.hardDomSelectors = normalizeList(merged.hardDomSelectors.length ? merged.hardDomSelectors : merged.suspiciousDomSelectors);
+    merged.candidateDomSelectors = normalizeList(merged.candidateDomSelectors);
+    merged.suspiciousDomSelectors = normalizeList(merged.suspiciousDomSelectors.length ? merged.suspiciousDomSelectors : merged.hardDomSelectors);
     merged.suspiciousTextTerms = normalizeList(merged.suspiciousTextTerms);
     merged.suspiciousStorageKeyTerms = normalizeList(merged.suspiciousStorageKeyTerms);
+    merged.candidateStorageKeyTerms = normalizeList(merged.candidateStorageKeyTerms);
     merged.suspiciousCookieKeyTerms = normalizeList(merged.suspiciousCookieKeyTerms);
+    merged.candidateCookieKeyTerms = normalizeList(merged.candidateCookieKeyTerms);
     merged.protectedCookieTerms = normalizeList(merged.protectedCookieTerms);
     return merged;
   }

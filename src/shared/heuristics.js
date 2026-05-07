@@ -42,15 +42,25 @@
     if (!profile) {
       return [];
     }
-    return normalizeHostList((profile.staticBlockedHosts || [])
+    return normalizeHostList((profile.hardBlockHosts || profile.staticBlockedHosts || [])
       .concat(profile.dynamicBlockedHosts || [])
       .concat(customHosts || []));
+  }
+
+  function profileCandidateHosts(profile) {
+    return normalizeHostList(profile && profile.candidateBlockHosts || []);
   }
 
   function isSuspiciousHost(profile, hostname, customHosts) {
     const host = normalizeHost(hostname);
     return profileBlockedHosts(profile, customHosts)
       .some((blockedHost) => isSubdomainOrSame(host, blockedHost));
+  }
+
+  function isCandidateHost(profile, hostname) {
+    const host = normalizeHost(hostname);
+    return profileCandidateHosts(profile)
+      .some((candidateHost) => isSubdomainOrSame(host, candidateHost));
   }
 
   function termPattern(terms, separatorAware) {
@@ -112,6 +122,10 @@
     return termPattern(profile && profile.suspiciousStorageKeyTerms, true).test(String(key || "").trim());
   }
 
+  function isCandidateStorageKey(profile, key) {
+    return termPattern(profile && profile.candidateStorageKeyTerms, true).test(String(key || "").trim());
+  }
+
   function shouldScrubCookieName(profile, name) {
     const normalized = String(name || "").trim();
     const suspiciousPattern = termPattern(profile && profile.suspiciousCookieKeyTerms, true);
@@ -123,6 +137,13 @@
     // Auth/session cookies are protected even if another suspicious term appears.
     // Profile authors should only relax this after confirming the cookie is safe.
     return !protectedPattern.test(normalized);
+  }
+
+  function isCandidateCookieName(profile, name) {
+    const normalized = String(name || "").trim();
+    const candidatePattern = termPattern(profile && profile.candidateCookieKeyTerms, true);
+    const protectedPattern = termPattern(profile && profile.protectedCookieTerms, false);
+    return candidatePattern.test(normalized) && !protectedPattern.test(normalized);
   }
 
   function textLooksLikeTrap(profile, text) {
@@ -142,12 +163,16 @@
     escapeRegExp,
     getUrlHostname,
     isSubdomainOrSame,
+    isCandidateHost,
+    isCandidateCookieName,
+    isCandidateStorageKey,
     isSuspiciousHost,
     isSuspiciousUrl,
     normalizeHost,
     normalizeHostList,
     normalizeList,
     profileBlockedHosts,
+    profileCandidateHosts,
     safeSelectorList,
     shouldScrubCookieName,
     shouldScrubStorageKey,

@@ -48,6 +48,22 @@ The first profile is `mangakakalot` in `src/profiles/sites/mangakakalot.js`. It 
 
 The initial Mangakakalot tuning is intentionally conservative. The priority is the reusable profile architecture; site-specific blocking should be tightened after observing real requests and DOM patterns.
 
+## Observe Vs Block
+
+Mangakakalot rules are split so tuning can be evidence-driven:
+
+- `hardBlockHosts`: hosts that are blocked by static or dynamic DNR rules.
+- `candidateBlockHosts`: hosts that are logged in inspection mode but not blocked automatically.
+- `hardDomSelectors`: selectors that remove matching suspicious elements.
+- `candidateDomSelectors`: selectors that are logged in inspection mode but not removed.
+- `suspiciousStorageKeyTerms`: storage keys that are removed.
+- `candidateStorageKeyTerms`: storage keys that are logged but kept.
+- `suspiciousCookieKeyTerms`: cookie names that are removed unless protected.
+- `candidateCookieKeyTerms`: cookie names that are logged but kept.
+- `protectedCookieTerms`: auth/session-like cookie names that are not removed.
+
+Custom blocked hosts and custom selectors entered in the popup are treated as blocking rules for the matched profile.
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.
@@ -115,17 +131,40 @@ The manifest includes broad `optional_host_permissions` so future sites do not n
 
 ## Observability
 
-When debug logging is enabled, the background stores a bounded local event list in `chrome.storage.local`. Events include `profileId` and categories such as:
+When debug logging is enabled, the background stores a bounded local event list in `chrome.storage.local`. Inspection mode turns debug logging on and also records observe-only candidate matches. Events include `profileId`, page URL/host, an action such as `block` or `observe`, and categories such as:
 
-- `dnr_block`
-- `click_block`
-- `open_block`
-- `dom_remove`
-- `storage_remove`
-- `cookie_remove`
-- `manual_scrub`
+- `network`
+- `dom`
+- `storage`
+- `cookie`
+- `click`
+- `open`
+- `permission`
+- `profile`
+- `manual`
 
-The popup shows the newest events for the matched profile. Debug is off by default.
+The popup shows the newest events for the matched profile and includes a **Copy debug** button. The copied diagnostic JSON contains extension version, active profile id, granted permissions summary, activated profiles, registered content scripts, counters, recent events, profile settings, and the Mangakakalot tuning summary.
+
+## Mangakakalot Tuning Workflow
+
+1. Load the extension unpacked and open `https://mangakakalot.gg` or `https://www.mangakakalot.gg`.
+2. Open the popup and enable **Debug logging and recent events**.
+3. Enable **Inspection mode: log observe-only matches**.
+4. Browse normally, including actions that previously triggered popups or redirects.
+5. Watch **Recent events** for:
+   - `network observe`: candidate hosts seen in URLs, iframes, or opens.
+   - `dom observe`: candidate selectors or overlay-shaped nodes seen but not removed.
+   - `storage observe`: candidate keys seen but not removed.
+   - `cookie observe`: candidate cookies seen but not removed.
+   - `click/open block`: actual blocked navigation behavior.
+6. Use **Copy debug** to capture a compact local snapshot for review.
+7. Promote a rule only after repeated evidence:
+   - candidate host -> `hardBlockHosts` and, if stable, `rules/static_rules.json`.
+   - candidate selector -> `hardDomSelectors`.
+   - candidate storage/cookie term -> suspicious storage/cookie terms.
+8. Reload the site and verify core reading/navigation still works.
+
+The MAIN-world `page_guard.js` is intentionally narrow. It runs through `chrome.scripting.registerContentScripts` with `world: "MAIN"` and `runAt: "document_start"` so it can patch `window.open`, but MAIN-world execution is still subject to page-world constraints and should stay small.
 
 ## Known Limitations
 
@@ -134,4 +173,5 @@ The popup shows the newest events for the matched profile. Debug is off by defau
 - DNR request counts depend on `declarativeNetRequest.onRuleMatchedDebug`, mainly useful in unpacked/debug builds.
 - Profile selection UI is a placeholder for future management; the active profile is still determined by the current tab hostname.
 - The page-level `window.open` guard runs in MAIN world through `chrome.scripting.registerContentScripts` at `document_start`. It uses bundled profile defaults; custom blocked hosts are handled by isolated content logic and DNR after reconciliation/reload.
+- Observe-only events are best-effort. They come from visible DOM URLs, clicks, opens, storage/cookie scans, and DNR debug feedback; they are not a complete network capture.
 - Mangakakalot heuristics are first-pass and conservative. Real-world tuning should be based on observed request hosts, overlay markup, and cookie/storage names.
