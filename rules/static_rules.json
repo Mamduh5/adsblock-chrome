@@ -26,7 +26,14 @@
         "redirectingat.com",
         "taboola.com",
         "trafficjunky.net",
-        "yllix.com"
+        "yllix.com",
+        "seonetwork.net",
+        "abcya3.games",
+        "flax.to",
+        "coolgamesunblocked.com",
+        "crazygamesunblocked.net",
+        "sunwin28.bz",
+        "hi88s.com"
       ],
       "resourceTypes": [
         "font",
@@ -60,7 +67,14 @@
         "linkbucks.com",
         "ouo.io",
         "shorte.st",
-        "tinyium.com"
+        "tinyium.com",
+        "seonetwork.net",
+        "abcya3.games",
+        "flax.to",
+        "coolgamesunblocked.com",
+        "crazygamesunblocked.net",
+        "sunwin28.bz",
+        "hi88s.com"
       ],
       "resourceTypes": [
         "main_frame",
@@ -85,6 +99,50 @@
         "sub_frame",
         "script",
         "xmlhttprequest"
+      ]
+    }
+  },
+  {
+    "id": 4,
+    "priority": 3,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://([^/]+\\.)?(seonetwork\\.net|abcya3\\.games|flax\\.to|coolgamesunblocked\\.com|crazygamesunblocked\\.net|sunwin28\\.bz|hi88s\\.com)(/|$)",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 3,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://([^/]+\\.)?(open88|fun88)[^/]*\\.",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
+        "other"
       ]
     }
   }

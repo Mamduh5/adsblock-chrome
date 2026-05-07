@@ -14,6 +14,8 @@
     debug: false,
     inspectionMode: false,
     profile: profiles.findByHostname(host),
+    pageType: "unknown",
+    pageRules: {},
     customBlockedHosts: [],
     customSelectors: [],
     removedNodes: new WeakSet(),
@@ -46,6 +48,8 @@
     state.debug = Boolean(response.debug);
     state.inspectionMode = Boolean(response.inspectionMode);
     state.profile = response.profile;
+    state.pageType = detectPageType(state.profile);
+    state.pageRules = state.profile.pageRules && state.profile.pageRules[state.pageType] || {};
     state.customBlockedHosts = response.settings.customBlockedHosts || [];
     state.customSelectors = response.settings.customSelectors || [];
     startShield();
@@ -117,13 +121,15 @@
 
       // Capture-phase click defense: block javascript: links, known bad hosts,
       // profile/custom blocked hosts, and redirector URLs with external targets.
-      if (heuristics.isSuspiciousUrl(state.profile, candidateUrl, state.customBlockedHosts, location.href)) {
+      if (heuristics.isSuspiciousUrl(state.profile, candidateUrl, state.customBlockedHosts, location.href) || isChapterJunkUrl(candidateUrl)) {
         stopEvent(event);
         incrementStats({ blockedRedirects: 1 });
         recordEvent(config.EVENT_CATEGORIES.CLICK, "Click navigation blocked", {
           action: "block",
+          pageType: state.pageType,
           url: candidateUrl,
           urlHost: heuristics.getUrlHostname(candidateUrl, location.href),
+          trigger: isChapterJunkUrl(candidateUrl) ? chapterJunkTrigger(candidateUrl, "") : "url-heuristic",
           text: trimText(actionable.textContent)
         });
         debugLog("click-blocked", { url: candidateUrl, text: actionable.textContent });
@@ -212,6 +218,9 @@
     removed += removeBySelectors(roots);
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
+    if (state.pageType === "chapter") {
+      removed += removeChapterJunk(roots);
+    }
     if (state.inspectionMode) {
       observePageUrls(roots);
     }
@@ -239,6 +248,27 @@
       for (const node of nodes) {
         if (node instanceof HTMLElement && shouldHideSelectorMatch(node)) {
           hideNode(node, "selector:" + selector);
+          removed += 1;
+        }
+      }
+    }
+
+    for (const selector of heuristics.safeSelectorList(state.pageRules.hardDomSelectors || [])) {
+      let nodes = [];
+      try {
+        nodes = queryWithinRoots(roots, selector, 80);
+      } catch (error) {
+        debugLog("invalid-page-selector", { selector });
+        continue;
+      }
+
+      for (const node of nodes) {
+        if (node instanceof HTMLElement && !isProtectedChapterNode(node)) {
+          hideNode(node, "chapter-selector:" + selector, {
+            pageType: state.pageType,
+            selector,
+            trigger: "selector"
+          });
           removed += 1;
         }
       }
@@ -327,15 +357,142 @@
           urlHost,
           node: describeNode(node)
         }, "candidate-url:" + url);
-      } else if (heuristics.isSuspiciousUrl(state.profile, url, state.customBlockedHosts, location.href)) {
+      } else if (heuristics.isSuspiciousUrl(state.profile, url, state.customBlockedHosts, location.href) || isChapterJunkUrl(url)) {
         recordEvent(config.EVENT_CATEGORIES.NETWORK, "Blocking URL heuristic matched", {
           action: "block",
+          pageType: state.pageType,
           url,
           urlHost,
+          trigger: isChapterJunkUrl(url) ? chapterJunkTrigger(url, "") : "url-heuristic",
           node: describeNode(node)
         }, "block-url:" + url);
       }
     }
+  }
+
+  function removeChapterJunk(roots) {
+    const rules = state.pageRules || {};
+    const maxScans = Number(rules.maxAnchorScansPerPass || 80);
+    const anchors = queryWithinRoots(roots, "a[href]", maxScans);
+    let removed = 0;
+
+    for (const anchor of anchors) {
+      if (!(anchor instanceof HTMLElement) || state.removedNodes.has(anchor) || isProtectedChapterNode(anchor)) {
+        continue;
+      }
+
+      const href = anchor.getAttribute("href") || "";
+      const text = trimText(anchor.textContent);
+      const trigger = chapterJunkTrigger(href, text);
+      if (!trigger) {
+        continue;
+      }
+
+      const target = findChapterJunkContainer(anchor);
+      if (!target || state.removedNodes.has(target) || isProtectedChapterNode(target)) {
+        continue;
+      }
+
+      hideNode(target, "chapter-junk:" + trigger, {
+        pageType: state.pageType,
+        trigger,
+        href,
+        text,
+        container: describeNode(target)
+      });
+      removed += 1;
+    }
+
+    return removed;
+  }
+
+  function chapterJunkTrigger(href, text) {
+    const rules = state.pageRules || {};
+    const urlHost = heuristics.getUrlHostname(href, location.href);
+    const haystack = (href + " " + text).toLowerCase();
+
+    for (const junkHost of rules.hardBlockHosts || []) {
+      if (urlHost && heuristics.isSubdomainOrSame(urlHost, junkHost)) {
+        return "host:" + junkHost;
+      }
+      if (haystack.includes(String(junkHost).toLowerCase())) {
+        return "text:" + junkHost;
+      }
+    }
+
+    for (const keyword of rules.hardHostKeywords || []) {
+      if (haystack.includes(String(keyword).toLowerCase())) {
+        return "keyword:" + keyword;
+      }
+    }
+
+    for (const term of rules.junkTextTerms || []) {
+      if (haystack.includes(String(term).toLowerCase())) {
+        return "term:" + term;
+      }
+    }
+
+    return "";
+  }
+
+  function findChapterJunkContainer(anchor) {
+    let current = anchor;
+    let depth = 0;
+    while (current && current instanceof HTMLElement && current !== document.body && depth < 4) {
+      if (isProtectedChapterNode(current)) {
+        return anchor;
+      }
+
+      if (isSafeChapterRemovalContainer(current)) {
+        return current;
+      }
+
+      current = current.parentElement;
+      depth += 1;
+    }
+    return anchor;
+  }
+
+  function isSafeChapterRemovalContainer(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (node.querySelector("img, picture, canvas, video")) {
+      return false;
+    }
+    if (node.querySelector("select, option, input, textarea, form")) {
+      return false;
+    }
+
+    const tag = node.tagName.toLowerCase();
+    const allowed = state.pageRules.removalContainerSelectors || ["a", "span", "p", "li", "div"];
+    if (!allowed.includes(tag) && !allowed.some((selector) => selector.startsWith(".") && node.matches(selector))) {
+      return false;
+    }
+
+    const text = trimText(node.textContent);
+    const anchorCount = node.querySelectorAll("a[href]").length;
+    return text.length <= 500 && anchorCount <= 12;
+  }
+
+  function isProtectedChapterNode(node) {
+    if (state.pageType !== "chapter" || !(node instanceof Element)) {
+      return false;
+    }
+    if (node.closest("img, picture, select, option, form, input, textarea")) {
+      return true;
+    }
+    for (const selector of state.pageRules.protectedSelectors || []) {
+      try {
+        if (node.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        debugLog("invalid-protected-selector", { selector });
+      }
+    }
+    const href = node instanceof HTMLAnchorElement ? node.getAttribute("href") || "" : "";
+    return /\/manga\/[^/]+\/chapter-/i.test(href);
   }
 
   function removeOverlayCandidates(roots) {
@@ -489,7 +646,7 @@
     return null;
   }
 
-  function hideNode(node, reason) {
+  function hideNode(node, reason, extraDetails) {
     if (state.removedNodes.has(node)) {
       return;
     }
@@ -499,7 +656,9 @@
     recordEvent(config.EVENT_CATEGORIES.DOM, "DOM node hidden", {
       action: "block",
       reason,
-      node: describeNode(node)
+      pageType: state.pageType,
+      node: describeNode(node),
+      ...(extraDetails || {})
     });
     debugLog("node-hidden", { reason, node: describeNode(node) });
   }
@@ -606,5 +765,26 @@
   function isCandidateUrl(url) {
     const host = heuristics.getUrlHostname(url, location.href);
     return host && heuristics.isCandidateHost(state.profile, host);
+  }
+
+  function isChapterJunkUrl(url) {
+    return state.pageType === "chapter" && Boolean(chapterJunkTrigger(url, ""));
+  }
+
+  function detectPageType(profile) {
+    const pageTypes = profile && profile.pageTypes || {};
+    for (const [pageType, rule] of Object.entries(pageTypes)) {
+      if (!rule || !rule.pathRegex) {
+        continue;
+      }
+      try {
+        if (new RegExp(rule.pathRegex, "i").test(location.pathname)) {
+          return pageType;
+        }
+      } catch (error) {
+        debugLog("invalid-page-type-regex", { pageType, pattern: rule.pathRegex });
+      }
+    }
+    return "unknown";
   }
 })();

@@ -26,7 +26,9 @@
     staticRuleIds: [
       1,
       2,
-      3
+      3,
+      4,
+      5
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -51,7 +53,14 @@
       "linkbucks.com",
       "ouo.io",
       "shorte.st",
-      "tinyium.com"
+      "tinyium.com",
+      "seonetwork.net",
+      "abcya3.games",
+      "flax.to",
+      "coolgamesunblocked.com",
+      "crazygamesunblocked.net",
+      "sunwin28.bz",
+      "hi88s.com"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -160,6 +169,80 @@
       "token",
       "user"
     ],
+    pageTypes: {
+      home: {
+        pathRegex: "^/$"
+      },
+      manga: {
+        pathRegex: "^/manga/[^/]+/?$"
+      },
+      chapter: {
+        pathRegex: "^/manga/[^/]+/chapter-[^/?#]+/?$"
+      }
+    },
+    pageRules: {
+      chapter: {
+        hardBlockHosts: [
+          "seonetwork.net",
+          "abcya3.games",
+          "flax.to",
+          "coolgamesunblocked.com",
+          "crazygamesunblocked.net",
+          "sunwin28.bz",
+          "hi88s.com"
+        ],
+        hardHostKeywords: [
+          "open88",
+          "fun88"
+        ],
+        hardDomSelectors: [
+          ".chapter-content a[href*='seonetwork.net' i]",
+          ".chapter-content a[href*='abcya3.games' i]",
+          ".chapter-content a[href*='flax.to' i]",
+          ".chapter-content a[href*='coolgamesunblocked.com' i]",
+          ".chapter-content a[href*='crazygamesunblocked.net' i]",
+          ".chapter-content a[href*='sunwin28.bz' i]",
+          ".chapter-content a[href*='hi88s.com' i]",
+          ".chapter-content a[href*='open88' i]",
+          ".chapter-content a[href*='fun88' i]"
+        ],
+        junkTextTerms: [
+          "seonetwork.net",
+          "abcya3.games",
+          "flax.to",
+          "coolgamesunblocked.com",
+          "crazygamesunblocked.net",
+          "sunwin28.bz",
+          "hi88s.com",
+          "open88",
+          "fun88"
+        ],
+        protectedSelectors: [
+          "img",
+          "picture",
+          "select",
+          "option",
+          "form",
+          "input",
+          "textarea",
+          ".chapter-list",
+          ".chapter-nav",
+          ".chapter-navigation",
+          ".navi-change-chapter",
+          ".comment",
+          "#comments",
+          "[class*='comment' i]"
+        ],
+        removalContainerSelectors: [
+          "p",
+          "li",
+          "span",
+          "div",
+          "section"
+        ],
+        maxAnchorScansPerPass: 80
+      }
+    },
     pageGuard: {
       patchWindowOpen: true,
       blockJavascriptUrls: true,

@@ -48,6 +48,18 @@ The first profile is `mangakakalot` in `src/profiles/sites/mangakakalot.js`. It 
 
 The initial Mangakakalot tuning is intentionally conservative. The priority is the reusable profile architecture; site-specific blocking should be tightened after observing real requests and DOM patterns.
 
+Mangakakalot also defines page types:
+
+- `home`: `/`
+- `manga`: `/manga/<slug>`
+- `chapter`: `/manga/<slug>/chapter-<id>`
+
+Chapter pages are treated more strictly because the reader view is where confirmed junk links appear. The sample reference shape is:
+
+```text
+https://www.mangakakalot.gg/manga/my-neighbor-ms-kurokawa/chapter-43
+```
+
 ## Observe Vs Block
 
 Mangakakalot rules are split so tuning can be evidence-driven:
@@ -63,6 +75,25 @@ Mangakakalot rules are split so tuning can be evidence-driven:
 - `protectedCookieTerms`: auth/session-like cookie names that are not removed.
 
 Custom blocked hosts and custom selectors entered in the popup are treated as blocking rules for the matched profile.
+
+## Mangakakalot Chapter Rules
+
+Confirmed chapter-page junk promoted to hard block:
+
+- `seonetwork.net`
+- `abcya3.games`
+- `flax.to`
+- `coolgamesunblocked.com`
+- `crazygamesunblocked.net`
+- `sunwin28.bz`
+- `hi88s.com`
+
+Confirmed wildcard-style junk handled by URL/text keyword rules and static DNR regex:
+
+- `open88.*`
+- `fun88.*`
+
+These are intentionally not applied to manga image hosts. Chapter cleanup focuses on anchors and small surrounding text containers whose href/text matches those domains or keywords, while avoiding images, chapter navigation, image server controls, forms, comments, and first-party chapter links.
 
 ## Runtime Model
 
@@ -165,6 +196,7 @@ The popup perf line reports DOM passes, skipped passes, dropped events, coalesce
    - `storage observe`: candidate keys seen but not removed.
    - `cookie observe`: candidate cookies seen but not removed.
    - `click/open block`: actual blocked navigation behavior.
+   - `dom block` on chapter pages: removed reader junk with `pageType`, `trigger`, and container summary.
 6. Use **Copy debug** to capture a compact local snapshot for review.
 7. Promote a rule only after repeated evidence:
    - candidate host -> `hardBlockHosts` and, if stable, `rules/static_rules.json`.

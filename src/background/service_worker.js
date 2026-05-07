@@ -876,6 +876,8 @@ async function buildDebugSnapshot(profileId, hostname) {
       candidateBlockHosts: profile.candidateBlockHosts,
       hardDomSelectors: profile.hardDomSelectors,
       candidateDomSelectors: profile.candidateDomSelectors,
+      pageTypes: profile.pageTypes,
+      pageRules: profile.pageRules,
       suspiciousStorageKeyTerms: profile.suspiciousStorageKeyTerms,
       suspiciousCookieKeyTerms: profile.suspiciousCookieKeyTerms,
       protectedCookieTerms: profile.protectedCookieTerms,
@@ -925,7 +927,8 @@ function profileSummary(profile) {
     hardBlockHosts: profile.hardBlockHosts,
     candidateBlockHosts: profile.candidateBlockHosts,
     hardDomSelectors: profile.hardDomSelectors,
-    candidateDomSelectors: profile.candidateDomSelectors
+    candidateDomSelectors: profile.candidateDomSelectors,
+    pageTypes: profile.pageTypes
   };
 }
 

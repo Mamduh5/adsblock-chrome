@@ -24,6 +24,8 @@
     suspiciousCookieKeyTerms: [],
     candidateCookieKeyTerms: [],
     protectedCookieTerms: [],
+    pageTypes: {},
+    pageRules: {},
     pageGuard: {
       patchWindowOpen: false,
       blockJavascriptUrls: true,
@@ -88,7 +90,35 @@
     merged.suspiciousCookieKeyTerms = normalizeList(merged.suspiciousCookieKeyTerms);
     merged.candidateCookieKeyTerms = normalizeList(merged.candidateCookieKeyTerms);
     merged.protectedCookieTerms = normalizeList(merged.protectedCookieTerms);
+    merged.pageTypes = normalizePageTypes(merged.pageTypes);
+    merged.pageRules = normalizePageRules(merged.pageRules);
     return merged;
+  }
+
+  function normalizePageTypes(pageTypes) {
+    const normalized = {};
+    for (const [pageType, rules] of Object.entries(pageTypes || {})) {
+      normalized[pageType] = {
+        pathRegex: String(rules && rules.pathRegex || "")
+      };
+    }
+    return normalized;
+  }
+
+  function normalizePageRules(pageRules) {
+    const normalized = {};
+    for (const [pageType, rules] of Object.entries(pageRules || {})) {
+      normalized[pageType] = {
+        hardBlockHosts: normalizeHostList(rules && rules.hardBlockHosts || []),
+        hardHostKeywords: normalizeList(rules && rules.hardHostKeywords || []),
+        hardDomSelectors: normalizeList(rules && rules.hardDomSelectors || []),
+        junkTextTerms: normalizeList(rules && rules.junkTextTerms || []),
+        protectedSelectors: normalizeList(rules && rules.protectedSelectors || []),
+        removalContainerSelectors: normalizeList(rules && rules.removalContainerSelectors || []),
+        maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80)
+      };
+    }
+    return normalized;
   }
 
   function validateProfile(profile) {
@@ -110,6 +140,8 @@
     normalizeHost,
     normalizeHostList,
     normalizeList,
+    normalizePageRules,
+    normalizePageTypes,
     normalizeProfile,
     validateProfile
   };

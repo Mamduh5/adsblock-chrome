@@ -105,6 +105,8 @@ vm.runInContext(
   const profile = context.SiteShieldProfiles.getById("mangakakalot");
 
   assert(profile, "Mangakakalot profile should be registered");
+  assert(profile.pageTypes.chapter, "Mangakakalot profile should define chapter page type");
+  assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
 
   const activated = await internals.activateProfile("mangakakalot", false);
