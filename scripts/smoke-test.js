@@ -110,6 +110,8 @@ vm.runInContext(
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
   assert(profile.pageRules.chapter.readerSelectors.length > 0, "chapter rules should include reader selectors");
+  assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
+  assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
 
   const activated = await internals.activateProfile("mangakakalot", false);

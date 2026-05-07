@@ -33,6 +33,8 @@
       domNodesProcessed: 0
     },
     perfTimer: null,
+    chapterClickCount: 0,
+    lastMutationTime: 0,
     pageGuardListenerInstalled: false
   };
 
@@ -83,6 +85,30 @@
       recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
     });
+    window.addEventListener("site-shield-click-shielded", (event) => {
+      incrementStats({ blockedRedirects: 1 });
+      recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter click shield blocked handler path", Object.assign({
+        action: "block",
+        pageType: state.pageType
+      }, event.detail || {}));
+      debugLog("chapter-click-shielded", event.detail || {});
+    });
+    window.addEventListener("site-shield-location-blocked", (event) => {
+      incrementStats({ blockedRedirects: 1 });
+      recordEvent(config.EVENT_CATEGORIES.CLICK, "Location redirect blocked during guarded click", Object.assign({
+        action: "block",
+        pageType: state.pageType
+      }, event.detail || {}));
+      debugLog("location-blocked", event.detail || {});
+    });
+    window.addEventListener("site-shield-location-patch-failed", (event) => {
+      if (state.inspectionMode) {
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Location patch unavailable", Object.assign({
+          action: "observe",
+          pageType: state.pageType
+        }, event.detail || {}), "location-patch:" + (event.detail && event.detail.source || ""));
+      }
+    });
     window.addEventListener("site-shield-open-observed", (event) => {
       if (state.inspectionMode) {
         recordEvent(config.EVENT_CATEGORIES.OPEN, "Candidate window.open observed", Object.assign({ action: "observe" }, event.detail || {}), "open:" + (event.detail && event.detail.url || ""));
@@ -98,6 +124,22 @@
 
       const target = event.target instanceof Element ? event.target : null;
       if (!target) {
+        return;
+      }
+
+      if (shouldShieldChapterClick(target)) {
+        state.chapterClickCount += 1;
+        stopEvent(event);
+        incrementStats({ blockedRedirects: 1 });
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter capture click shielded", {
+          action: "block",
+          pageType: state.pageType,
+          source: clickActionSource(target),
+          clickCount: state.chapterClickCount,
+          afterMutationBurst: Date.now() - state.lastMutationTime <= Number(state.pageRules.shieldMutationBurstMs || 1200),
+          target: describeNode(target),
+          reason: "reader_delegated_click"
+        });
         return;
       }
 
@@ -154,6 +196,7 @@
   function installMutationObserver() {
     const root = document.documentElement || document;
     state.observer = new MutationObserver((mutations) => {
+      state.lastMutationTime = Date.now();
       let queued = false;
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
@@ -680,6 +723,50 @@
       }
     }
     return false;
+  }
+
+  function shouldShieldChapterClick(target) {
+    if (state.pageType !== "chapter" || !state.pageRules.clickShieldEnabled) {
+      return false;
+    }
+    if (isProtectedChapterNode(target) || isChapterOverlayAllowed(target)) {
+      return false;
+    }
+
+    const actionable = target.closest("a[href], button, [role='button'], [onclick], [data-href], [data-url]");
+    if (actionable) {
+      const url = actionable.getAttribute("href") || actionable.getAttribute("data-href") || actionable.getAttribute("data-url") || "";
+      if (!url) {
+        return false;
+      }
+      const urlHost = heuristics.getUrlHostname(url, location.href);
+      return Boolean(urlHost && !profiles.profileMatchesHostname(state.profile, urlHost)) || isChapterJunkUrl(url);
+    }
+
+    return Boolean(state.pageRules.shieldPlainReaderClicks && isInsideChapterReader(target));
+  }
+
+  function isInsideChapterReader(target) {
+    for (const selector of state.pageRules.readerSelectors || []) {
+      try {
+        if (target.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        debugLog("invalid-reader-selector", { selector });
+      }
+    }
+    return target.tagName === "IMG";
+  }
+
+  function clickActionSource(target) {
+    if (target.closest("a[href]")) {
+      return "anchor";
+    }
+    if (target.closest("[onclick], [role='button'], button")) {
+      return "handler";
+    }
+    return "unknown";
   }
 
   function removeOverlayCandidates(roots) {

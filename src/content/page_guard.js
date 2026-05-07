@@ -14,6 +14,9 @@
     patchWindowOpen(profile);
   }
 
+  installChapterClickShield(profile);
+  patchLocationMethods(profile);
+
   function patchWindowOpen(activeProfile) {
     const originalOpen = window.open;
     window.open = function guardedWindowOpen(url, target, features) {
@@ -35,13 +38,206 @@
             profileId: activeProfile.id,
             url: String(url || ""),
             target: String(target || ""),
-            action: "block"
+            action: "block",
+            source: "window.open",
+            clickCount: shieldState.clickCount,
+            afterMutationBurst: isAfterMutationBurst(activeProfile)
           }
         }));
         return null;
       }
       return originalOpen.call(window, url, target, features);
     };
+  }
+
+  const shieldState = {
+    clickCount: 0,
+    lastMutationTime: 0,
+    lastShieldedAt: 0
+  };
+
+  function installChapterClickShield(activeProfile) {
+    const pageType = detectPageType(activeProfile);
+    const rules = activeProfile.pageRules && activeProfile.pageRules[pageType];
+    if (pageType !== "chapter" || !rules || !rules.clickShieldEnabled) {
+      return;
+    }
+
+    new MutationObserver(() => {
+      shieldState.lastMutationTime = Date.now();
+    }).observe(document.documentElement || document, { childList: true, subtree: true });
+
+    const events = rules.clickShieldEvents && rules.clickShieldEvents.length
+      ? rules.clickShieldEvents
+      : ["mousedown", "click", "auxclick"];
+
+    for (const eventName of events) {
+      document.addEventListener(eventName, (event) => {
+        handleChapterShieldEvent(activeProfile, rules, event);
+      }, true);
+    }
+  }
+
+  function handleChapterShieldEvent(activeProfile, rules, event) {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || isAllowedReaderControl(rules, target)) {
+      return;
+    }
+
+    const source = clickActionSource(target);
+    const clickable = target.closest("a[href], button, [role='button'], [onclick], [data-href], [data-url]");
+    const url = clickable ? clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || "" : "";
+    const junk = url && isPageJunkUrl(activeProfile, url);
+    const offsite = url && isOffsiteUrl(activeProfile, url);
+    const readerClick = Boolean(rules.shieldPlainReaderClicks && isInsideReaderArea(rules, target));
+    const largeSurface = isLargeClickSurface(target);
+
+    if (!junk && !offsite && !readerClick && !largeSurface) {
+      return;
+    }
+
+    shieldState.clickCount += event.type === "click" ? 1 : 0;
+    shieldState.lastShieldedAt = Date.now();
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    event.stopPropagation();
+
+    window.dispatchEvent(new CustomEvent("site-shield-click-shielded", {
+      detail: {
+        profileId: activeProfile.id,
+        action: "block",
+        source,
+        eventType: event.type,
+        clickCount: shieldState.clickCount,
+        afterMutationBurst: isAfterMutationBurst(activeProfile),
+        url: String(url || ""),
+        host: url ? getUrlHost(url) : "",
+        reason: junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : "large_click_surface",
+        target: describeElement(target)
+      }
+    }));
+  }
+
+  function patchLocationMethods(activeProfile) {
+    const locationPrototype = Object.getPrototypeOf(window.location);
+    for (const method of ["assign", "replace"]) {
+      try {
+        const original = locationPrototype && locationPrototype[method];
+        if (typeof original !== "function") {
+          continue;
+        }
+        Object.defineProperty(locationPrototype, method, {
+          configurable: true,
+          value: function guardedLocationChange(url) {
+            if (isGuardedClickWindow(activeProfile) && isSuspiciousUrl(activeProfile, url)) {
+              window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
+                detail: {
+                  profileId: activeProfile.id,
+                  action: "block",
+                  source: "location." + method,
+                  url: String(url || ""),
+                  host: getUrlHost(url),
+                  clickCount: shieldState.clickCount,
+                  afterMutationBurst: isAfterMutationBurst(activeProfile)
+                }
+              }));
+              return undefined;
+            }
+            return original.call(this, url);
+          }
+        });
+      } catch (error) {
+        window.dispatchEvent(new CustomEvent("site-shield-location-patch-failed", {
+          detail: { profileId: activeProfile.id, action: "observe", source: "location." + method }
+        }));
+      }
+    }
+  }
+
+  function isGuardedClickWindow(activeProfile) {
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)];
+    const burstMs = Number(rules && rules.shieldMutationBurstMs || 1200);
+    return Date.now() - shieldState.lastShieldedAt <= burstMs;
+  }
+
+  function isAfterMutationBurst(activeProfile) {
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)];
+    const burstMs = Number(rules && rules.shieldMutationBurstMs || 1200);
+    return Date.now() - shieldState.lastMutationTime <= burstMs;
+  }
+
+  function isAllowedReaderControl(rules, target) {
+    for (const selector of (rules.overlayAllowSelectors || []).concat(rules.protectedSelectors || [])) {
+      try {
+        if (target.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        return false;
+      }
+    }
+    const link = target.closest("a[href]");
+    if (!link) {
+      return false;
+    }
+    const href = link.getAttribute("href") || "";
+    return /^#/.test(href) || /\/manga\/[^/]+\/chapter-/i.test(href) || isFirstPartyUrl(href);
+  }
+
+  function isInsideReaderArea(rules, target) {
+    for (const selector of rules.readerSelectors || []) {
+      try {
+        if (target.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        return false;
+      }
+    }
+    return target.tagName === "IMG";
+  }
+
+  function isLargeClickSurface(target) {
+    const element = target.closest("a[href], [onclick], [role='button']") || target;
+    if (!(element instanceof Element)) {
+      return false;
+    }
+    const rect = element.getBoundingClientRect();
+    return rect.width >= window.innerWidth * 0.65 && rect.height >= 160;
+  }
+
+  function clickActionSource(target) {
+    if (target.closest("a[href]")) {
+      return "anchor";
+    }
+    if (target.closest("[onclick], [role='button'], button")) {
+      return "handler";
+    }
+    return "unknown";
+  }
+
+  function isOffsiteUrl(activeProfile, url) {
+    const host = getUrlHost(url);
+    return Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
+  }
+
+  function isFirstPartyUrl(url) {
+    const host = getUrlHost(url);
+    return !host || profiles.profileMatchesHostname(profile, host);
+  }
+
+  function getUrlHost(url) {
+    try {
+      return new URL(String(url || ""), location.href).hostname;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function describeElement(node) {
+    const id = node.id ? "#" + node.id : "";
+    const className = typeof node.className === "string" && node.className ? "." + node.className.trim().replace(/\s+/g, ".") : "";
+    return node.tagName.toLowerCase() + id + className;
   }
 
   function isSuspiciousUrl(activeProfile, url) {

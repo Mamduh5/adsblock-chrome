@@ -122,7 +122,11 @@
         overlayMinViewportWidthRatio: Number(rules && rules.overlayMinViewportWidthRatio || 0.75),
         overlayMinViewportHeightRatio: Number(rules && rules.overlayMinViewportHeightRatio || 0.45),
         overlayMinReaderOverlapRatio: Number(rules && rules.overlayMinReaderOverlapRatio || 0.25),
-        overlayNearTransparentOpacity: Number(rules && rules.overlayNearTransparentOpacity || 0.12)
+        overlayNearTransparentOpacity: Number(rules && rules.overlayNearTransparentOpacity || 0.12),
+        clickShieldEnabled: rules && rules.clickShieldEnabled !== false,
+        clickShieldEvents: normalizeList(rules && rules.clickShieldEvents || ["mousedown", "click", "auxclick"]),
+        shieldPlainReaderClicks: rules && rules.shieldPlainReaderClicks !== false,
+        shieldMutationBurstMs: Number(rules && rules.shieldMutationBurstMs || 1200)
       };
     }
     return normalized;

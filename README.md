@@ -97,6 +97,8 @@ These are intentionally not applied to manga image hosts. Chapter cleanup focuse
 
 Chapter pages also get click-trap overlay neutralization. The content script checks bounded changed roots for clickable elements that are fixed/absolute/sticky, large enough to cover the viewport or reader area, near-transparent or empty, or off-site. Clear junk anchors are hidden; riskier page-covering surfaces have pointer events disabled and inline click handlers removed. Diagnostics include `pageType`, `reason`, tag/node summary, host, trigger, and approximate rect.
 
+Stateful click hijacks are handled separately from overlay removal. On chapter pages, a MAIN-world capture listener shields `mousedown`, `click`, and `auxclick` before late page handlers can consume them. It blocks off-site/junk action targets and delegated clicks on the reader container, and it keeps reporting `clickCount`, action source (`window.open`, `anchor`, `location.*`, `handler`, or `unknown`), and whether the event happened shortly after a DOM mutation burst. This is meant to catch limited-use rearming behavior where the first few clicks open one scam tab each.
+
 Narrow Mangakakalot reader allowlist:
 
 - chapter navigation controls

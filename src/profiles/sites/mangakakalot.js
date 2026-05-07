@@ -269,7 +269,15 @@
         overlayMinViewportWidthRatio: 0.72,
         overlayMinViewportHeightRatio: 0.4,
         overlayMinReaderOverlapRatio: 0.2,
-        overlayNearTransparentOpacity: 0.15
+        overlayNearTransparentOpacity: 0.15,
+        clickShieldEnabled: true,
+        clickShieldEvents: [
+          "mousedown",
+          "click",
+          "auxclick"
+        ],
+        shieldPlainReaderClicks: true,
+        shieldMutationBurstMs: 1200
       }
     },
     pageGuard: {
