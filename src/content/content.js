@@ -27,10 +27,18 @@
     cleanupTimer: null,
     observer: null,
     cleanupQueued: false,
+    readerCacheAt: 0,
+    readerRootsCache: [],
+    readerRectsCache: [],
     perfDelta: {
       domPasses: 0,
       skippedDomPasses: 0,
-      domNodesProcessed: 0
+      domNodesProcessed: 0,
+      clicksShielded: 0,
+      opensBlocked: 0,
+      duplicateOpenAttemptsBlocked: 0,
+      orphanJunkRemoved: 0,
+      expensiveScansSkipped: 0
     },
     perfTimer: null,
     chapterClickCount: 0,
@@ -82,11 +90,16 @@
     state.pageGuardListenerInstalled = true;
     window.addEventListener("site-shield-open-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
+      addPerfDelta({
+        opensBlocked: 1,
+        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0
+      });
       recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
     });
     window.addEventListener("site-shield-click-shielded", (event) => {
       incrementStats({ blockedRedirects: 1 });
+      addPerfDelta({ clicksShielded: 1 });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter click shield blocked handler path", Object.assign({
         action: "block",
         pageType: state.pageType
@@ -95,6 +108,10 @@
     });
     window.addEventListener("site-shield-location-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
+      addPerfDelta({
+        opensBlocked: 1,
+        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0
+      });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Location redirect blocked during guarded click", Object.assign({
         action: "block",
         pageType: state.pageType
@@ -131,6 +148,7 @@
         state.chapterClickCount += 1;
         stopEvent(event);
         incrementStats({ blockedRedirects: 1 });
+        addPerfDelta({ clicksShielded: 1 });
         recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter capture click shielded", {
           action: "block",
           pageType: state.pageType,
@@ -265,6 +283,7 @@
     if (state.pageType === "chapter") {
       removed += removeChapterJunk(roots);
       removed += neutralizeChapterClickTraps(roots);
+      removed += removeChapterOrphanJunk(roots);
     }
     if (state.inspectionMode) {
       observePageUrls(roots);
@@ -453,7 +472,11 @@
 
   function neutralizeChapterClickTraps(roots) {
     const rules = state.pageRules || {};
-    const candidates = collectElements(roots, Number(rules.maxOverlayScansPerPass || 120));
+    const candidates = queryWithinRoots(
+      roots,
+      "a[href], [onclick], [role='button'], button, [data-href], [data-url]",
+      Number(rules.maxOverlayScansPerPass || 80)
+    );
     const readerRects = getReaderRects();
     let neutralized = 0;
 
@@ -490,6 +513,98 @@
     }
 
     return neutralized;
+  }
+
+  function removeChapterOrphanJunk(roots) {
+    const rules = state.pageRules || {};
+    const limit = Number(rules.maxOrphanScansPerPass || 60);
+    let removed = 0;
+
+    for (const selector of heuristics.safeSelectorList(rules.orphanSelectors || [])) {
+      let nodes = [];
+      try {
+        nodes = queryWithinRoots(roots, selector, limit);
+      } catch (error) {
+        debugLog("invalid-orphan-selector", { selector });
+        continue;
+      }
+      for (const node of nodes) {
+        if (removed >= limit) {
+          break;
+        }
+        if (node instanceof HTMLElement && shouldRemoveOrphanJunkNode(node)) {
+          hideNode(node, "chapter-orphan-selector:" + selector, orphanDetails(node, "selector", selector));
+          removed += 1;
+        }
+      }
+    }
+
+    const textCandidates = queryWithinRoots(
+      roots,
+      "button, a, span, p, div, small, label",
+      Math.max(20, limit - removed)
+    );
+    for (const node of textCandidates) {
+      if (removed >= limit) {
+        break;
+      }
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || isClickAllowedChapterControl(node)) {
+        continue;
+      }
+      const reason = orphanTextReason(node);
+      if (!reason || !shouldRemoveOrphanJunkNode(node)) {
+        continue;
+      }
+      hideNode(node, "chapter-orphan-text:" + reason, orphanDetails(node, "text", reason));
+      removed += 1;
+    }
+
+    if (removed > 0) {
+      addPerfDelta({ orphanJunkRemoved: removed });
+    }
+    return removed;
+  }
+
+  function shouldRemoveOrphanJunkNode(node) {
+    if (state.removedNodes.has(node) || isProtectedChapterNode(node) || isClickAllowedChapterControl(node)) {
+      return false;
+    }
+    if (node.querySelector("img, picture, canvas, video, select, option, input, textarea, form")) {
+      return false;
+    }
+    const text = trimText(node.textContent);
+    const rect = node.getBoundingClientRect();
+    const hasAdName = /(^|[-_\s])(ad|ads|advert|advertisement|sponsor|popup|close)([-_\s]|$)/i.test(node.id + " " + node.className);
+    const adLabel = (state.pageRules.orphanTextTerms || []).some((term) => text.toLowerCase() === String(term).toLowerCase());
+    const closeLabel = /^(x|×|close)$/i.test(text) && (hasAdName || (rect.width <= 64 && rect.height <= 64));
+    return text.length <= 80 && (hasAdName || adLabel || closeLabel);
+  }
+
+  function orphanTextReason(node) {
+    const text = trimText(node.textContent);
+    const lower = text.toLowerCase();
+    for (const term of state.pageRules.orphanTextTerms || []) {
+      if (lower === String(term).toLowerCase()) {
+        return term;
+      }
+    }
+    if (/^(x|×|close)$/i.test(text)) {
+      return "close";
+    }
+    return "";
+  }
+
+  function orphanDetails(node, reason, trigger) {
+    const rect = node.getBoundingClientRect();
+    return {
+      action: "block",
+      pageType: state.pageType,
+      reason: "orphan_" + reason,
+      trigger,
+      node: describeNode(node),
+      text: trimText(node.textContent),
+      rect: rectSummary(rect)
+    };
   }
 
   function isPotentialClickSurface(node) {
@@ -529,14 +644,38 @@
   }
 
   function getReaderRects() {
+    const now = Date.now();
+    const cacheMs = Number(state.pageRules.readerRectCacheMs || 3000);
+    if (state.readerRectsCache.length && now - state.readerCacheAt <= cacheMs) {
+      return state.readerRectsCache;
+    }
+
     const selectors = state.pageRules.readerSelectors || [];
     const rects = [];
+    const roots = [];
+    for (const cachedRoot of state.readerRootsCache) {
+      if (cachedRoot instanceof Element && cachedRoot.isConnected) {
+        const rect = cachedRoot.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          rects.push(rect);
+          roots.push(cachedRoot);
+        }
+      }
+    }
+    if (rects.length) {
+      state.readerRootsCache = roots;
+      state.readerRectsCache = rects;
+      state.readerCacheAt = now;
+      return rects;
+    }
+
     for (const selector of selectors) {
       try {
         for (const node of document.querySelectorAll(selector)) {
           const rect = node.getBoundingClientRect();
           if (rect.width > 0 && rect.height > 0) {
             rects.push(rect);
+            roots.push(node);
           }
         }
       } catch (error) {
@@ -544,17 +683,23 @@
       }
     }
 
-    if (!rects.length) {
+    if (!rects.length && !state.readerRootsCache.length) {
       for (const image of document.querySelectorAll("img")) {
         const rect = image.getBoundingClientRect();
         if (rect.width >= 200 && rect.height >= 200) {
           rects.push(rect);
+          roots.push(image);
           if (rects.length >= 12) {
             break;
           }
         }
       }
+    } else if (!rects.length) {
+      addPerfDelta({ expensiveScansSkipped: 1 });
     }
+    state.readerRootsCache = roots.length ? roots : state.readerRootsCache.filter((node) => node.isConnected);
+    state.readerRectsCache = rects;
+    state.readerCacheAt = now;
     return rects;
   }
 
@@ -725,11 +870,32 @@
     return false;
   }
 
+  function isClickAllowedChapterControl(node) {
+    if (state.pageType !== "chapter" || !(node instanceof Element)) {
+      return false;
+    }
+    for (const selector of state.pageRules.clickAllowSelectors || []) {
+      try {
+        if (node.closest(selector)) {
+          return true;
+        }
+      } catch (error) {
+        debugLog("invalid-click-allow-selector", { selector });
+      }
+    }
+    const link = node.closest("a[href]");
+    if (!link) {
+      return false;
+    }
+    const href = link.getAttribute("href") || "";
+    return /^#/.test(href) || /\/manga\/[^/]+\/chapter-/i.test(href) || isFirstPartyUrl(href);
+  }
+
   function shouldShieldChapterClick(target) {
     if (state.pageType !== "chapter" || !state.pageRules.clickShieldEnabled) {
       return false;
     }
-    if (isProtectedChapterNode(target) || isChapterOverlayAllowed(target)) {
+    if (isClickAllowedChapterControl(target)) {
       return false;
     }
 
@@ -744,6 +910,11 @@
     }
 
     return Boolean(state.pageRules.shieldPlainReaderClicks && isInsideChapterReader(target));
+  }
+
+  function isFirstPartyUrl(url) {
+    const urlHost = heuristics.getUrlHostname(url, location.href);
+    return !urlHost || profiles.profileMatchesHostname(state.profile, urlHost);
   }
 
   function isInsideChapterReader(target) {
@@ -771,7 +942,13 @@
 
   function removeOverlayCandidates(roots) {
     let removed = 0;
-    const candidates = collectElements(roots, MAX_NODES_PER_PASS);
+    const candidates = state.pageType === "chapter"
+      ? queryWithinRoots(
+        roots,
+        "[id*='ad' i], [class*='ad' i], [id*='popup' i], [class*='popup' i], [id*='overlay' i], [class*='overlay' i], [style*='position: fixed' i], [style*='position:fixed' i], [style*='z-index' i], iframe",
+        120
+      )
+      : collectElements(roots, MAX_NODES_PER_PASS);
 
     for (const node of candidates) {
       if (!(node instanceof HTMLElement) || state.removedNodes.has(node)) {
@@ -891,6 +1068,13 @@
     state.perfDelta.skippedDomPasses += 1;
   }
 
+  function addPerfDelta(delta) {
+    for (const [key, value] of Object.entries(delta || {})) {
+      state.perfDelta[key] = Number(state.perfDelta[key] || 0) + Number(value || 0);
+    }
+    flushPerfSoon();
+  }
+
   function flushPerfSoon() {
     if (state.perfTimer) {
       return;
@@ -901,9 +1085,14 @@
       state.perfDelta = {
         domPasses: 0,
         skippedDomPasses: 0,
-        domNodesProcessed: 0
+        domNodesProcessed: 0,
+        clicksShielded: 0,
+        opensBlocked: 0,
+        duplicateOpenAttemptsBlocked: 0,
+        orphanJunkRemoved: 0,
+        expensiveScansSkipped: 0
       };
-      if (delta.domPasses || delta.skippedDomPasses || delta.domNodesProcessed) {
+      if (Object.values(delta).some((value) => Number(value || 0) > 0)) {
         chrome.runtime.sendMessage({ type: "recordPerf", profileId: state.profile.id, delta });
       }
     }, 3000);

@@ -294,6 +294,12 @@
       + " passes, "
       + String(perf.skippedDomPasses || 0)
       + " skipped, "
+      + String(perf.clicksShielded || 0)
+      + " shielded clicks, "
+      + String(perf.opensBlocked || 0)
+      + " opens blocked, "
+      + String(perf.orphanJunkRemoved || 0)
+      + " orphan UI removed, "
       + String(perf.eventsDropped || 0)
       + " dropped, "
       + String(perf.eventsCoalesced || 0)

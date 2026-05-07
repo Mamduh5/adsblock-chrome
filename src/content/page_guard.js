@@ -10,8 +10,18 @@
   }
   window.__SITE_SHIELD_PAGE_GUARD_INSTALLED__ = true;
 
+  const shieldState = {
+    clickCount: 0,
+    clickSerial: 0,
+    openAttemptsForClick: 0,
+    lastUserClickAt: 0,
+    lastMutationTime: 0,
+    lastShieldedAt: 0
+  };
+
   if (profile.pageGuard && profile.pageGuard.patchWindowOpen) {
     patchWindowOpen(profile);
+    patchAnchorClick(profile);
   }
 
   installChapterClickShield(profile);
@@ -33,6 +43,7 @@
         }));
       }
       if (isSuspiciousUrl(activeProfile, url)) {
+        const attempt = markBlockedOpenAttempt();
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
           detail: {
             profileId: activeProfile.id,
@@ -41,6 +52,9 @@
             action: "block",
             source: "window.open",
             clickCount: shieldState.clickCount,
+            clickSerial: shieldState.clickSerial,
+            duplicateAttempt: attempt.duplicateAttempt,
+            openAttemptsForClick: attempt.openAttemptsForClick,
             afterMutationBurst: isAfterMutationBurst(activeProfile)
           }
         }));
@@ -50,11 +64,32 @@
     };
   }
 
-  const shieldState = {
-    clickCount: 0,
-    lastMutationTime: 0,
-    lastShieldedAt: 0
-  };
+  function patchAnchorClick(activeProfile) {
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function guardedAnchorClick() {
+      const href = this.getAttribute("href") || "";
+      if (isGuardedClickWindow(activeProfile) && isSuspiciousUrl(activeProfile, href)) {
+        const attempt = markBlockedOpenAttempt();
+        window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
+          detail: {
+            profileId: activeProfile.id,
+            action: "block",
+            source: "anchor.click",
+            url: String(href || ""),
+            host: getUrlHost(href),
+            target: String(this.getAttribute("target") || ""),
+            clickCount: shieldState.clickCount,
+            clickSerial: shieldState.clickSerial,
+            duplicateAttempt: attempt.duplicateAttempt,
+            openAttemptsForClick: attempt.openAttemptsForClick,
+            afterMutationBurst: isAfterMutationBurst(activeProfile)
+          }
+        }));
+        return undefined;
+      }
+      return originalClick.call(this);
+    };
+  }
 
   function installChapterClickShield(activeProfile) {
     const pageType = detectPageType(activeProfile);
@@ -71,10 +106,27 @@
       ? rules.clickShieldEvents
       : ["mousedown", "click", "auxclick"];
 
+    const targets = new Set([window, document, document.documentElement].filter(Boolean));
+    if (document.body) {
+      targets.add(document.body);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (document.body) {
+        for (const eventName of events) {
+          document.body.addEventListener(eventName, (event) => {
+            handleChapterShieldEvent(activeProfile, rules, event);
+          }, true);
+        }
+      }
+    }, { once: true });
+
     for (const eventName of events) {
-      document.addEventListener(eventName, (event) => {
-        handleChapterShieldEvent(activeProfile, rules, event);
-      }, true);
+      for (const target of targets) {
+        target.addEventListener(eventName, (event) => {
+          handleChapterShieldEvent(activeProfile, rules, event);
+        }, true);
+      }
     }
   }
 
@@ -96,7 +148,9 @@
       return;
     }
 
-    shieldState.clickCount += event.type === "click" ? 1 : 0;
+    if (event.type === "pointerdown" || event.type === "mousedown" || (event.type === "click" && Date.now() - shieldState.lastUserClickAt > 500)) {
+      beginClickSequence();
+    }
     shieldState.lastShieldedAt = Date.now();
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -109,6 +163,7 @@
         source,
         eventType: event.type,
         clickCount: shieldState.clickCount,
+        clickSerial: shieldState.clickSerial,
         afterMutationBurst: isAfterMutationBurst(activeProfile),
         url: String(url || ""),
         host: url ? getUrlHost(url) : "",
@@ -130,6 +185,7 @@
           configurable: true,
           value: function guardedLocationChange(url) {
             if (isGuardedClickWindow(activeProfile) && isSuspiciousUrl(activeProfile, url)) {
+              const attempt = markBlockedOpenAttempt();
               window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
                 detail: {
                   profileId: activeProfile.id,
@@ -138,6 +194,9 @@
                   url: String(url || ""),
                   host: getUrlHost(url),
                   clickCount: shieldState.clickCount,
+                  clickSerial: shieldState.clickSerial,
+                  duplicateAttempt: attempt.duplicateAttempt,
+                  openAttemptsForClick: attempt.openAttemptsForClick,
                   afterMutationBurst: isAfterMutationBurst(activeProfile)
                 }
               }));
@@ -166,8 +225,26 @@
     return Date.now() - shieldState.lastMutationTime <= burstMs;
   }
 
+  function beginClickSequence() {
+    shieldState.clickCount += 1;
+    shieldState.clickSerial += 1;
+    shieldState.openAttemptsForClick = 0;
+    shieldState.lastUserClickAt = Date.now();
+  }
+
+  function markBlockedOpenAttempt() {
+    if (Date.now() - shieldState.lastUserClickAt > 1500) {
+      shieldState.openAttemptsForClick = 0;
+    }
+    shieldState.openAttemptsForClick += 1;
+    return {
+      duplicateAttempt: shieldState.openAttemptsForClick > 1,
+      openAttemptsForClick: shieldState.openAttemptsForClick
+    };
+  }
+
   function isAllowedReaderControl(rules, target) {
-    for (const selector of (rules.overlayAllowSelectors || []).concat(rules.protectedSelectors || [])) {
+    for (const selector of rules.clickAllowSelectors || []) {
       try {
         if (target.closest(selector)) {
           return true;

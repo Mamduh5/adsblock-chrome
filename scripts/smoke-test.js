@@ -109,8 +109,11 @@ vm.runInContext(
   assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
+  assert(profile.pageRules.chapter.clickAllowSelectors.length > 0, "chapter rules should include click allowlist");
   assert(profile.pageRules.chapter.readerSelectors.length > 0, "chapter rules should include reader selectors");
+  assert(profile.pageRules.chapter.orphanSelectors.length > 0, "chapter rules should include orphan cleanup selectors");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
+  assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
 

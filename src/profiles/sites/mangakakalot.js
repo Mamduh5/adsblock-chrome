@@ -257,6 +257,42 @@
           "#comments",
           "[class*='comment' i]"
         ],
+        clickAllowSelectors: [
+          ".chapter-nav",
+          ".chapter-navigation",
+          ".navi-change-chapter",
+          ".chapter-control",
+          ".chapter-controls",
+          ".chapter-list",
+          ".panel-chapter-info-top",
+          ".panel-chapter-info-bottom",
+          "select",
+          "option",
+          "form",
+          "input",
+          "textarea",
+          "#comments",
+          "[class*='comment' i]"
+        ],
+        orphanSelectors: [
+          ".chapter-content [class*='advertisement' i]",
+          ".chapter-content [id*='advertisement' i]",
+          ".chapter-content [class*='advert' i]",
+          ".chapter-content [id*='advert' i]",
+          ".chapter-content [class*='adsby' i]",
+          ".chapter-content [class*='ad-label' i]",
+          ".container-chapter-reader [class*='advertisement' i]",
+          ".container-chapter-reader [id*='advertisement' i]",
+          ".container-chapter-reader [class*='advert' i]",
+          ".container-chapter-reader [id*='advert' i]",
+          ".container-chapter-reader [class*='adsby' i]",
+          ".container-chapter-reader [class*='ad-label' i]"
+        ],
+        orphanTextTerms: [
+          "advertisement",
+          "advertisements",
+          "sponsored"
+        ],
         removalContainerSelectors: [
           "p",
           "li",
@@ -265,13 +301,16 @@
           "section"
         ],
         maxAnchorScansPerPass: 100,
-        maxOverlayScansPerPass: 140,
+        maxOverlayScansPerPass: 80,
+        maxOrphanScansPerPass: 70,
+        readerRectCacheMs: 3000,
         overlayMinViewportWidthRatio: 0.72,
         overlayMinViewportHeightRatio: 0.4,
         overlayMinReaderOverlapRatio: 0.2,
         overlayNearTransparentOpacity: 0.15,
         clickShieldEnabled: true,
         clickShieldEvents: [
+          "pointerdown",
           "mousedown",
           "click",
           "auxclick"

@@ -31,7 +31,12 @@ const perfCounters = {
   lastFlushSize: 0,
   domPasses: 0,
   skippedDomPasses: 0,
-  domNodesProcessed: 0
+  domNodesProcessed: 0,
+  clicksShielded: 0,
+  opensBlocked: 0,
+  duplicateOpenAttemptsBlocked: 0,
+  orphanJunkRemoved: 0,
+  expensiveScansSkipped: 0
 };
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -903,7 +908,18 @@ function getPerfSummary() {
 }
 
 function mergePerfCounters(delta) {
-  for (const key of ["domPasses", "skippedDomPasses", "domNodesProcessed", "eventsDropped", "eventsCoalesced"]) {
+  for (const key of [
+    "domPasses",
+    "skippedDomPasses",
+    "domNodesProcessed",
+    "eventsDropped",
+    "eventsCoalesced",
+    "clicksShielded",
+    "opensBlocked",
+    "duplicateOpenAttemptsBlocked",
+    "orphanJunkRemoved",
+    "expensiveScansSkipped"
+  ]) {
     perfCounters[key] += Number(delta[key] || 0);
   }
 }
