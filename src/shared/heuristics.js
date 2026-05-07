@@ -1,35 +1,22 @@
 (function exposeSiteShieldHeuristics(globalScope) {
   "use strict";
 
-  const config = globalScope.SiteShieldConfig;
-  const separatorPattern = "(^|[._\\-:])";
-  const endSeparatorPattern = "($|[._\\-:])";
-  const storageTermPattern = new RegExp(
-    separatorPattern + "(" + config.SUSPICIOUS_STORAGE_TERMS.map(escapeRegExp).join("|") + ")" + endSeparatorPattern,
-    "i"
-  );
-  const protectedCookiePattern = new RegExp(
-    "(" + config.PROTECTED_COOKIE_TERMS.map(escapeRegExp).join("|") + ")",
-    "i"
-  );
-  const redirectPathPattern = new RegExp(config.REDIRECT_URL_PATTERN, "i");
-  const trapTextPattern = new RegExp(config.TRAP_TEXT_PATTERN, "i");
+  const schema = globalScope.SiteShieldProfileSchema;
 
   function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function normalizeHost(hostname) {
-    return String(hostname || "")
-      .trim()
-      .toLowerCase()
-      .replace(/^\.+/, "")
-      .replace(/\.+$/, "");
+    return schema.normalizeHost(hostname);
   }
 
-  function isTargetHostname(hostname) {
-    const host = normalizeHost(hostname);
-    return host === config.TARGET_DOMAIN || host.endsWith("." + config.TARGET_DOMAIN);
+  function normalizeHostList(hosts) {
+    return schema.normalizeHostList(hosts);
+  }
+
+  function normalizeList(values) {
+    return schema.normalizeList(values);
   }
 
   function isSubdomainOrSame(hostname, rootDomain) {
@@ -40,26 +27,42 @@
 
   function getUrlHostname(url, baseUrl) {
     try {
-      return new URL(url, baseUrl || "https://" + config.TARGET_DOMAIN + "/").hostname;
+      return new URL(url, baseUrl || "https://example.invalid/").hostname;
     } catch (error) {
       return "";
     }
   }
 
-  function normalizeHostList(hosts) {
-    return Array.from(new Set((hosts || [])
-      .map((host) => normalizeHost(host))
-      .filter(Boolean)
-      .filter((host) => !host.includes("/") && !host.includes("*"))));
+  function safeSelectorList(selectors) {
+    return normalizeList(selectors)
+      .filter((selector) => selector.length <= 300);
   }
 
-  function isSuspiciousHost(hostname, customHosts) {
-    const host = normalizeHost(hostname);
-    const blockedHosts = config.BAD_THIRD_PARTY_HOSTS
-      .concat(config.REDIRECT_HOSTS)
-      .concat(normalizeHostList(customHosts));
+  function profileBlockedHosts(profile, customHosts) {
+    if (!profile) {
+      return [];
+    }
+    return normalizeHostList((profile.staticBlockedHosts || [])
+      .concat(profile.dynamicBlockedHosts || [])
+      .concat(customHosts || []));
+  }
 
-    return blockedHosts.some((blockedHost) => isSubdomainOrSame(host, blockedHost));
+  function isSuspiciousHost(profile, hostname, customHosts) {
+    const host = normalizeHost(hostname);
+    return profileBlockedHosts(profile, customHosts)
+      .some((blockedHost) => isSubdomainOrSame(host, blockedHost));
+  }
+
+  function termPattern(terms, separatorAware) {
+    const normalized = normalizeList(terms).map(escapeRegExp);
+    if (!normalized.length) {
+      return /$a/;
+    }
+    const body = "(" + normalized.join("|") + ")";
+    if (!separatorAware) {
+      return new RegExp(body, "i");
+    }
+    return new RegExp("(^|[._\\-:])" + body + "($|[._\\-:])", "i");
   }
 
   function hasExternalUrlParam(url) {
@@ -76,9 +79,9 @@
     return false;
   }
 
-  function isSuspiciousUrl(url, customHosts, baseUrl) {
+  function isSuspiciousUrl(profile, url, customHosts, baseUrl) {
     const rawUrl = String(url || "").trim();
-    if (!rawUrl) {
+    if (!rawUrl || !profile) {
       return false;
     }
 
@@ -88,15 +91,16 @@
 
     let parsed;
     try {
-      parsed = new URL(rawUrl, baseUrl || "https://" + config.TARGET_DOMAIN + "/");
+      parsed = new URL(rawUrl, baseUrl || "https://example.invalid/");
     } catch (error) {
       return false;
     }
 
-    if (isSuspiciousHost(parsed.hostname, customHosts)) {
+    if (isSuspiciousHost(profile, parsed.hostname, customHosts)) {
       return true;
     }
 
+    const redirectPathPattern = termPattern(profile.tuning && profile.tuning.redirectUrlTerms, false);
     if (redirectPathPattern.test(parsed.pathname + parsed.search) && hasExternalUrlParam(parsed.href)) {
       return true;
     }
@@ -104,42 +108,46 @@
     return false;
   }
 
-  function shouldScrubStorageKey(key) {
-    const normalized = String(key || "").trim();
-    return storageTermPattern.test(normalized);
+  function shouldScrubStorageKey(profile, key) {
+    return termPattern(profile && profile.suspiciousStorageKeyTerms, true).test(String(key || "").trim());
   }
 
-  function shouldScrubCookieName(name) {
+  function shouldScrubCookieName(profile, name) {
     const normalized = String(name || "").trim();
-    if (!storageTermPattern.test(normalized)) {
+    const suspiciousPattern = termPattern(profile && profile.suspiciousCookieKeyTerms, true);
+    const protectedPattern = termPattern(profile && profile.protectedCookieTerms, false);
+    if (!suspiciousPattern.test(normalized)) {
       return false;
     }
 
-    // Auth/session cookies are protected even if their names contain words like "campaign".
-    // Tune this list only after confirming a cookie is not needed for sign-in or playback.
-    return !protectedCookiePattern.test(normalized);
+    // Auth/session cookies are protected even if another suspicious term appears.
+    // Profile authors should only relax this after confirming the cookie is safe.
+    return !protectedPattern.test(normalized);
   }
 
-  function textLooksLikeTrap(text) {
-    return trapTextPattern.test(String(text || "").trim());
+  function textLooksLikeTrap(profile, text) {
+    return termPattern(profile && profile.suspiciousTextTerms, false).test(String(text || "").trim());
   }
 
-  function safeSelectorList(selectors) {
-    return (selectors || [])
-      .map((selector) => String(selector || "").trim())
-      .filter(Boolean)
-      .filter((selector) => selector.length <= 300);
+  function domNameLooksSuspicious(profile, value) {
+    const terms = []
+      .concat(profile && profile.suspiciousStorageKeyTerms || [])
+      .concat(profile && profile.suspiciousCookieKeyTerms || [])
+      .concat(["ad", "ads", "popup", "popunder", "overlay", "interstitial", "redirect", "promo", "campaign"]);
+    return termPattern(terms, false).test(String(value || ""));
   }
 
   globalScope.SiteShieldHeuristics = {
+    domNameLooksSuspicious,
     escapeRegExp,
     getUrlHostname,
     isSubdomainOrSame,
     isSuspiciousHost,
     isSuspiciousUrl,
-    isTargetHostname,
     normalizeHost,
     normalizeHostList,
+    normalizeList,
+    profileBlockedHosts,
     safeSelectorList,
     shouldScrubCookieName,
     shouldScrubStorageKey,

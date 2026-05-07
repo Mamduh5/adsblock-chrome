@@ -1,18 +1,76 @@
 # Site Shield
 
-Site Shield is a local-only Chrome Manifest V3 extension scoped to `example.com` and `*.example.com`. It is a domain-specific shield, not a general ad blocker.
+Site Shield is a local-only Chrome Manifest V3 extension for selected desktop Chrome sites. It is not a generic ad blocker. Core logic is profile-driven so each supported site can define its own scope, network hosts, DOM selectors, storage/cookie heuristics, and page-world guard behavior.
+
+No remote code, remote rule downloads, analytics, or telemetry are used.
 
 ## Architecture
 
-- `manifest.json` scopes host access and content scripts to the target domain only.
-- `rules/static_rules.json` blocks known bad third-party ad, popup, and redirect hosts through `declarativeNetRequest`.
-- `src/background/service_worker.js` owns settings, dynamic DNR rules, session counters, and selective cookie cleanup.
-- `src/content/content.js` removes suspicious overlays/iframes, intercepts click traps, and selectively scrubs suspicious storage keys.
-- `src/content/page_guard.js` runs in the page context to neutralize obvious `window.open` abuse.
-- `src/popup/*` provides the extension UI for status, toggles, custom blocked hosts/selectors, debug mode, and manual cookie scrubbing.
-- `src/shared/*` contains target-domain constants and tuneable heuristics.
+- `manifest.json` declares MV3 permissions, the currently supported host scopes, content scripts, static DNR rules, and popup.
+- `src/profiles/schema.js` defines the profile shape and normalizers.
+- `src/profiles/sites/*.js` contains site-specific profile definitions.
+- `src/profiles/index.js` builds the profile registry and answers "which profile matches this host?"
+- `rules/static_rules.json` contains static `declarativeNetRequest` rules for known bad hosts in current profiles.
+- `src/background/service_worker.js` owns profile settings, dynamic DNR reconciliation, selective cookie cleanup, session counters, and bounded debug events.
+- `src/content/content.js` receives the matched profile and performs DOM cleanup, iframe removal, click interception, and selective storage scrubbing.
+- `src/content/page_guard.js` is injected as a web-accessible page script so page-global patches such as `window.open` run in the page world, not the content script isolated world.
+- `src/popup/*` shows current matched profile, in-scope status, counters, profile-scoped custom hosts/selectors, debug mode, and recent events.
 
-No remote code, remote rule downloads, analytics, or telemetry are used.
+## Profile Structure
+
+Profiles live in `src/profiles/sites/` and are registered by pushing definitions into `SiteShieldProfileDefinitions`. `src/profiles/index.js` validates and exposes them.
+
+Each profile can define:
+
+- `id`
+- `displayName`
+- `description`
+- `matchPatterns`
+- `hostPermissionPatterns`
+- `domains`
+- `includeSubdomains`
+- `dnrInitiatorDomains`
+- `staticRuleIds`
+- `staticBlockedHosts`
+- `dynamicBlockedHosts`
+- `suspiciousDomSelectors`
+- `suspiciousTextTerms`
+- `suspiciousStorageKeyTerms`
+- `suspiciousCookieKeyTerms`
+- `protectedCookieTerms`
+- `pageGuard`
+- `tuning`
+
+The first profile is `mangakakalot` in `src/profiles/sites/mangakakalot.js`. It covers:
+
+- `https://mangakakalot.gg/*`
+- `https://www.mangakakalot.gg/*`
+
+The initial Mangakakalot tuning is intentionally conservative. The priority is the reusable profile architecture; site-specific blocking should be tightened after observing real requests and DOM patterns.
+
+## Adding A New Site Later
+
+1. Create `src/profiles/sites/new-site.js`.
+2. Push a profile definition into `SiteShieldProfileDefinitions`.
+3. Add the script to `manifest.json` before `src/profiles/index.js`.
+4. Add the site's host patterns to:
+   - `host_permissions`
+   - `content_scripts.matches`
+   - `web_accessible_resources.matches`
+5. Add static DNR rules in `rules/static_rules.json` for known bad hosts if they are safe and well understood.
+6. Load the extension unpacked and smoke test the new profile.
+
+Chrome requires host permissions and content-script matches to be declared in `manifest.json`, so adding a new profile still needs a manifest update. Core background/content/popup logic does not need site-specific changes.
+
+## Permissions
+
+- `alarms`: schedules periodic selective cookie cleanup.
+- `cookies`: removes only profile-matched suspicious cookie names.
+- `declarativeNetRequest`: applies static and dynamic network blocking rules.
+- `declarativeNetRequestFeedback`: records local debug counts/events for matched DNR rules while testing unpacked.
+- `storage`: saves settings, counters, and bounded local debug events.
+- `activeTab`: lets the popup identify the current tab hostname after the user opens it.
+- `host_permissions`: currently limited to `mangakakalot.gg` and `www.mangakakalot.gg`.
 
 ## Load Unpacked
 
@@ -21,32 +79,40 @@ No remote code, remote rule downloads, analytics, or telemetry are used.
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
 5. Select this repository folder.
-6. Visit `https://example.com` or a subdomain to test activation.
+6. Visit `https://mangakakalot.gg` or `https://www.mangakakalot.gg` to test activation.
 
-## How To Test
+## Smoke Test
 
 - Open `chrome://extensions` and confirm Site Shield loads without manifest errors.
-- Visit a non-target site and confirm the popup says the extension is inactive on that site.
-- Visit `https://example.com` and confirm the popup reports the current target host.
-- Toggle the shield off, reload the target tab, and confirm DOM cleanup no longer runs.
-- Toggle debug logging on, reload the target tab, and inspect the page console/service worker console for `[Site Shield]` messages.
-- Add a custom blocked host in the popup, save, reload the target tab, and verify requests to that host are blocked.
-- Add a custom selector such as `.annoying-overlay`, save, reload, and verify matching target-site elements are hidden.
+- Visit a non-profile site and confirm the popup reports out-of-scope.
+- Visit `https://mangakakalot.gg` or `https://www.mangakakalot.gg` and confirm the popup shows `Mangakakalot` and profile id `mangakakalot`.
+- Toggle the global shield off, reload the matched tab, and confirm DOM cleanup no longer runs.
+- Toggle the matched profile off, reload the matched tab, and confirm profile-specific behavior stops.
+- Toggle debug logging on, reload the matched tab, and inspect the page console/service worker console for `[Site Shield]` messages.
+- Add a custom blocked host in the popup, save, reload the matched tab, and verify requests to that host are blocked.
+- Add a custom selector such as `.annoying-overlay`, save, reload, and verify matching profile-site elements are hidden.
 - Create test storage keys such as `popup_seen` or `redirect_campaign` in DevTools and reload; they should be removed.
-- Create normal keys and cookies that do not match suspicious patterns; they should remain.
+- Create normal keys and cookies that do not match suspicious profile patterns; they should remain.
+- Use **Scrub cookies** in the popup and confirm only suspicious cookie names are removed.
 
-## Tuning Notes
+## Observability
 
-- Add/remove known network hosts in `rules/static_rules.json` for static blocking.
-- Add one host per line in the popup for local dynamic DNR rules.
-- Add one CSS selector per line in the popup for site-specific DOM cleanup.
-- Tune suspicious storage/cookie terms in `src/shared/config.js`.
-- Protected cookie terms in `src/shared/config.js` prevent broad deletion of auth/session-like cookies.
+When debug logging is enabled, the background stores a bounded local event list in `chrome.storage.local`. Events include `profileId` and categories such as:
+
+- `dnr_block`
+- `click_block`
+- `open_block`
+- `dom_remove`
+- `storage_remove`
+- `cookie_remove`
+- `manual_scrub`
+
+The popup shows the newest events for the matched profile. Debug is off by default.
 
 ## Known Limitations
 
-- Static and dynamic request counts rely on `declarativeNetRequest.onRuleMatchedDebug`, which is mainly useful for unpacked/debug builds.
-- The enable/disable toggle is global for the target site scope, not per individual subdomain.
-- The page-level `window.open` guard uses built-in known host patterns; custom popup hosts are handled by DNR and content-click checks, not the injected page script.
-- DOM heuristics are conservative by design and may need target-site tuning after observing real bad elements.
-- Chrome extensions cannot stop every navigation method used by hostile page scripts, but this blocks common click, iframe, redirect URL, DNR, and `window.open` paths.
+- Static DNR rules are JSON, so new site profiles still need manifest/rules updates for host permission and static blocking.
+- DNR request counts depend on `declarativeNetRequest.onRuleMatchedDebug`, mainly useful in unpacked/debug builds.
+- Profile selection UI is a placeholder for future management; the active profile is still determined by the current tab hostname.
+- The page-level `window.open` guard receives profile data at injection time. Changes to custom hosts require saving and reloading the tab.
+- Mangakakalot heuristics are first-pass and conservative. Real-world tuning should be based on observed request hosts, overlay markup, and cookie/storage names.

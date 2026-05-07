@@ -1,19 +1,19 @@
 {
   "manifest_version": 3,
   "name": "Site Shield",
-  "version": "0.1.0",
-  "description": "A local-only, domain-specific shield for example.com and its subdomains.",
+  "version": "0.2.0",
+  "description": "A local-only, profile-based site shield for selected desktop Chrome sites.",
   "permissions": [
     "alarms",
     "cookies",
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "storage",
-    "tabs"
+    "activeTab"
   ],
   "host_permissions": [
-    "*://example.com/*",
-    "*://*.example.com/*"
+    "*://mangakakalot.gg/*",
+    "*://www.mangakakalot.gg/*"
   ],
   "background": {
     "service_worker": "src/background/service_worker.js"
@@ -25,8 +25,8 @@
   "content_scripts": [
     {
       "matches": [
-        "*://example.com/*",
-        "*://*.example.com/*"
+        "*://mangakakalot.gg/*",
+        "*://www.mangakakalot.gg/*"
       ],
       "all_frames": true,
       "run_at": "document_start",
@@ -34,6 +34,9 @@
         "src/content/content.css"
       ],
       "js": [
+        "src/profiles/schema.js",
+        "src/profiles/sites/mangakakalot.js",
+        "src/profiles/index.js",
         "src/shared/config.js",
         "src/shared/heuristics.js",
         "src/content/content.js"
@@ -55,8 +58,8 @@
         "src/content/page_guard.js"
       ],
       "matches": [
-        "*://example.com/*",
-        "*://*.example.com/*"
+        "*://mangakakalot.gg/*",
+        "*://www.mangakakalot.gg/*"
       ]
     }
   ]

@@ -2,11 +2,13 @@
   "use strict";
 
   const config = globalThis.SiteShieldConfig;
+  const profiles = globalThis.SiteShieldProfiles;
   const heuristics = globalThis.SiteShieldHeuristics;
   const host = location.hostname;
   const state = {
     enabled: false,
     debug: false,
+    profile: profiles.findByHostname(host),
     customBlockedHosts: [],
     customSelectors: [],
     removedNodes: new WeakSet(),
@@ -15,20 +17,21 @@
   };
 
   chrome.runtime.sendMessage({ type: "getState", hostname: host }, (response) => {
-    if (!response || !response.ok || !response.enabled) {
+    if (!response || !response.ok || !response.enabled || !response.profile) {
       return;
     }
 
     state.enabled = true;
     state.debug = Boolean(response.debug);
+    state.profile = response.profile;
     state.customBlockedHosts = response.settings.customBlockedHosts || [];
     state.customSelectors = response.settings.customSelectors || [];
     startShield();
   });
 
   function startShield() {
-    injectPageGuard();
     installPageGuardListener();
+    injectPageGuard();
     tryScrubStorage("localStorage");
     tryScrubStorage("sessionStorage");
     installClickInterceptor();
@@ -37,16 +40,28 @@
   }
 
   function injectPageGuard() {
+    if (!state.profile.pageGuard || !state.profile.pageGuard.patchWindowOpen) {
+      return;
+    }
+
     const script = document.createElement("script");
     script.src = chrome.runtime.getURL("src/content/page_guard.js");
-    script.dataset.siteShield = "page-guard";
+    script.dataset.siteShieldProfile = JSON.stringify({
+      profileId: state.profile.id,
+      domains: state.profile.domains,
+      includeSubdomains: Boolean(state.profile.includeSubdomains),
+      blockedHosts: heuristics.profileBlockedHosts(state.profile, state.customBlockedHosts),
+      pageGuard: state.profile.pageGuard,
+      redirectUrlTerms: state.profile.tuning && state.profile.tuning.redirectUrlTerms || []
+    });
     script.onload = () => script.remove();
     (document.documentElement || document.head || document).appendChild(script);
   }
 
   function installPageGuardListener() {
-    window.addEventListener("site-shield-window-open-blocked", (event) => {
+    window.addEventListener("site-shield-open-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
+      recordEvent(config.EVENT_CATEGORIES.OPEN_BLOCK, "window.open blocked", event.detail || {});
       debugLog("window-open-blocked", event.detail || {});
     });
   }
@@ -73,19 +88,27 @@
         || "";
 
       // Capture-phase click defense: block javascript: links, known bad hosts,
-      // and redirector URLs that carry an external destination.
-      if (heuristics.isSuspiciousUrl(candidateUrl, state.customBlockedHosts, location.href)) {
+      // profile/custom blocked hosts, and redirector URLs with external targets.
+      if (heuristics.isSuspiciousUrl(state.profile, candidateUrl, state.customBlockedHosts, location.href)) {
         stopEvent(event);
         incrementStats({ blockedRedirects: 1 });
+        recordEvent(config.EVENT_CATEGORIES.CLICK_BLOCK, "Click navigation blocked", {
+          url: candidateUrl,
+          text: trimText(actionable.textContent)
+        });
         debugLog("click-blocked", { url: candidateUrl, text: actionable.textContent });
         return;
       }
 
       const overlay = findSuspiciousAncestor(actionable);
-      if (overlay && heuristics.textLooksLikeTrap(actionable.textContent)) {
+      if (overlay && heuristics.textLooksLikeTrap(state.profile, actionable.textContent)) {
         stopEvent(event);
         hideNode(overlay, "trap-click-overlay");
         incrementStats({ blockedRedirects: 1, removedOverlays: 1 });
+        recordEvent(config.EVENT_CATEGORIES.CLICK_BLOCK, "Trap overlay click blocked", {
+          node: describeNode(overlay),
+          text: trimText(actionable.textContent)
+        });
       }
     }, true);
   }
@@ -127,7 +150,7 @@
 
   function removeBySelectors() {
     let removed = 0;
-    const selectors = config.DEFAULT_CUSTOM_SELECTORS.concat(state.customSelectors);
+    const selectors = (state.profile.suspiciousDomSelectors || []).concat(state.customSelectors);
 
     for (const selector of heuristics.safeSelectorList(selectors)) {
       let nodes;
@@ -156,14 +179,14 @@
 
     const style = getComputedStyle(node);
     const text = node.textContent || "";
-    return isOverlayStyle(node, style) || heuristics.textLooksLikeTrap(text);
+    return isOverlayStyle(node, style) || heuristics.textLooksLikeTrap(state.profile, text);
   }
 
   function removeSuspiciousIframes() {
     let removed = 0;
     for (const frame of document.querySelectorAll("iframe")) {
       const src = frame.getAttribute("src") || "";
-      if (heuristics.isSuspiciousUrl(src, state.customBlockedHosts, location.href)) {
+      if (heuristics.isSuspiciousUrl(state.profile, src, state.customBlockedHosts, location.href)) {
         hideNode(frame, "suspicious-iframe");
         removed += 1;
       }
@@ -186,8 +209,8 @@
       }
 
       const text = node.textContent || "";
-      const hasTrapText = heuristics.textLooksLikeTrap(text);
-      const hasSuspiciousClass = /ad|ads|popup|popunder|overlay|interstitial|redirect|promo|campaign/i.test(node.id + " " + node.className);
+      const hasTrapText = heuristics.textLooksLikeTrap(state.profile, text);
+      const hasSuspiciousClass = heuristics.domNameLooksSuspicious(state.profile, node.id + " " + node.className);
       const hasBadFrame = Boolean(node.querySelector("iframe[src]"));
 
       // Overlay detection stays conservative: fixed/sticky, large, clickable,
@@ -207,8 +230,9 @@
       return false;
     }
 
+    const tuning = state.profile.tuning || {};
     const zIndex = Number.parseInt(style.zIndex, 10);
-    if (!Number.isFinite(zIndex) || zIndex < 1000) {
+    if (!Number.isFinite(zIndex) || zIndex < Number(tuning.overlayMinZIndex || 1000)) {
       return false;
     }
 
@@ -219,7 +243,9 @@
     const rect = node.getBoundingClientRect();
     const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
     const area = Math.max(0, rect.width) * Math.max(0, rect.height);
-    return area / viewportArea >= 0.35 || (rect.width >= window.innerWidth * 0.85 && rect.height >= 120);
+    return area / viewportArea >= Number(tuning.overlayMinViewportAreaRatio || 0.35)
+      || (rect.width >= window.innerWidth * Number(tuning.overlayWideWidthRatio || 0.85)
+        && rect.height >= Number(tuning.overlayWideMinHeight || 120));
   }
 
   function findSuspiciousAncestor(node) {
@@ -240,6 +266,10 @@
     state.removedNodes.add(node);
     node.setAttribute("data-site-shield-hidden", "true");
     node.setAttribute("aria-hidden", "true");
+    recordEvent(config.EVENT_CATEGORIES.DOM_REMOVE, "DOM node hidden", {
+      reason,
+      node: describeNode(node)
+    });
     debugLog("node-hidden", { reason, node: describeNode(node) });
   }
 
@@ -264,15 +294,16 @@
     }
 
     for (const key of keys) {
-      if (!key || !heuristics.shouldScrubStorageKey(key)) {
+      if (!key || !heuristics.shouldScrubStorageKey(state.profile, key)) {
         continue;
       }
 
-      // Selective storage cleanup removes only explicit ad/popup/redirect keys.
+      // Selective storage cleanup removes only profile-defined suspicious keys.
       // It intentionally does not clear the full storage area.
       try {
         storageArea.removeItem(key);
         deleted += 1;
+        recordEvent(config.EVENT_CATEGORIES.STORAGE_REMOVE, "Storage key removed", { area: label, key });
         debugLog("storage-key-deleted", { label, key });
       } catch (error) {
         debugLog("storage-delete-failed", { label, key, error: String(error) });
@@ -291,7 +322,18 @@
   }
 
   function incrementStats(delta) {
-    chrome.runtime.sendMessage({ type: "incrementStats", hostname: host, delta });
+    chrome.runtime.sendMessage({ type: "incrementStats", profileId: state.profile.id, hostname: host, delta });
+  }
+
+  function recordEvent(category, summary, details) {
+    chrome.runtime.sendMessage({
+      type: "recordEvent",
+      profileId: state.profile.id,
+      hostname: host,
+      category,
+      summary,
+      details
+    });
   }
 
   function debugLog(eventName, details) {
@@ -304,5 +346,9 @@
     const id = node.id ? "#" + node.id : "";
     const className = typeof node.className === "string" && node.className ? "." + node.className.trim().replace(/\s+/g, ".") : "";
     return node.tagName.toLowerCase() + id + className;
+  }
+
+  function trimText(text) {
+    return String(text || "").replace(/\s+/g, " ").trim().slice(0, 120);
   }
 })();

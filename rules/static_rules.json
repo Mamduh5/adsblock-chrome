@@ -7,7 +7,8 @@
     },
     "condition": {
       "initiatorDomains": [
-        "example.com"
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
       ],
       "requestDomains": [
         "ad-maven.com",
@@ -49,7 +50,8 @@
     },
     "condition": {
       "initiatorDomains": [
-        "example.com"
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
       ],
       "requestDomains": [
         "adf.ly",
@@ -74,9 +76,10 @@
     },
     "condition": {
       "initiatorDomains": [
-        "example.com"
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
       ],
-      "regexFilter": "^https?://([^/]+\\.)?example\\.com/.*(pop|popup|redirect|interstitial)",
+      "regexFilter": "^https?://(www\\.)?mangakakalot\\.gg/.*(pop|popup|redirect|interstitial)",
       "resourceTypes": [
         "main_frame",
         "sub_frame",

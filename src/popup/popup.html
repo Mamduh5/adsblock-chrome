@@ -12,11 +12,30 @@
         <h1>Site Shield</h1>
         <p id="siteStatus">Checking current tab...</p>
       </div>
-      <label class="switch" title="Enable Site Shield on the target site">
-        <input id="enabledToggle" type="checkbox">
+      <label class="switch" title="Enable Site Shield globally">
+        <input id="globalEnabledToggle" type="checkbox">
         <span></span>
       </label>
     </header>
+
+    <section class="profile-panel" aria-label="Matched profile">
+      <div>
+        <span>Matched profile</span>
+        <strong id="profileName">None</strong>
+      </div>
+      <div>
+        <span>Profile id</span>
+        <code id="profileId">out-of-scope</code>
+      </div>
+      <label>
+        Profile management
+        <select id="profileSelect" disabled></select>
+      </label>
+      <label class="check-row">
+        <input id="profileEnabledToggle" type="checkbox">
+        <span>Enable matched profile</span>
+      </label>
+    </section>
 
     <section class="stats" aria-label="Session counters">
       <div>
@@ -39,18 +58,23 @@
 
     <label class="check-row">
       <input id="debugToggle" type="checkbox">
-      <span>Debug logging</span>
+      <span>Debug logging and recent events</span>
     </label>
 
     <label>
-      Custom blocked hosts
+      Profile custom blocked hosts
       <textarea id="customHosts" spellcheck="false" placeholder="bad-ad-host.example"></textarea>
     </label>
 
     <label>
-      Custom CSS selectors
+      Profile custom CSS selectors
       <textarea id="customSelectors" spellcheck="false" placeholder=".annoying-overlay"></textarea>
     </label>
+
+    <section class="events" aria-label="Recent debug events">
+      <div class="section-title">Recent events</div>
+      <ol id="recentEvents"></ol>
+    </section>
 
     <footer>
       <button id="saveButton" type="button">Save</button>
