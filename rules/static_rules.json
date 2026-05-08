@@ -223,8 +223,22 @@
         "sub_frame",
         "script",
         "xmlhttprequest",
+        "ping",
         "image",
         "other"
+      ]
+    }
+  },
+  {
+    "id": 10,
+    "priority": 20,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||oundhertobeconsist.org/floater",
+      "resourceTypes": [
+        "main_frame"
       ]
     }
   }

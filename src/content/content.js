@@ -57,6 +57,13 @@
       readerInjectedAdBlockRemoved: 0,
       hiddenOnlyFallbackCount: 0,
       floaterRequestBlocked: 0,
+      floaterMainFrameBlocked: 0,
+      floaterFetchBlocked: 0,
+      floaterXhrBlocked: 0,
+      floaterBeaconBlocked: 0,
+      floaterWindowOpenBlocked: 0,
+      floaterLocationBlocked: 0,
+      floaterAnchorBlocked: 0,
       centeredPopupIframeRemoved: 0,
       popupSiblingFixedDivRemoved: 0,
       remainingBudgetKeysCleared: 0,
@@ -119,7 +126,8 @@
       addPerfDelta({
         opensBlocked: 1,
         duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
-        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
+        ...floaterPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
@@ -128,7 +136,8 @@
       incrementStats({ blockedRedirects: 1 });
       addPerfDelta({
         clicksShielded: 1,
-        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
+        ...floaterPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter click shield blocked handler path", Object.assign({
         action: "block",
@@ -141,7 +150,8 @@
       addPerfDelta({
         opensBlocked: 1,
         duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
-        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
+        ...floaterPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Location redirect blocked during guarded click", Object.assign({
         action: "block",
@@ -162,6 +172,40 @@
         recordEvent(config.EVENT_CATEGORIES.OPEN, "Candidate window.open observed", Object.assign({ action: "observe" }, event.detail || {}), "open:" + (event.detail && event.detail.url || ""));
       }
     });
+    window.addEventListener("site-shield-floater-blocked", (event) => {
+      incrementStats({ blockedRedirects: 1 });
+      addPerfDelta(floaterPerfDelta(event.detail));
+      recordEvent(config.EVENT_CATEGORIES.NETWORK, "Floater request blocked", Object.assign({
+        action: "block",
+        pageType: state.pageType
+      }, event.detail || {}));
+      debugLog("floater-blocked", event.detail || {});
+    });
+  }
+
+  function floaterPerfDelta(detail) {
+    if (!detail || !isFloaterUrl(detail.url)) {
+      return {};
+    }
+    const source = String(detail.source || "");
+    return {
+      floaterRequestBlocked: 1,
+      floaterFetchBlocked: source === "fetch" ? 1 : 0,
+      floaterXhrBlocked: source === "xhr" ? 1 : 0,
+      floaterBeaconBlocked: source === "beacon" ? 1 : 0,
+      floaterWindowOpenBlocked: source === "window_open" ? 1 : 0,
+      floaterLocationBlocked: source === "location_assign" || source === "location_replace" || source === "location_href" ? 1 : 0,
+      floaterAnchorBlocked: source === "anchor_blank" || source === "anchor_click" || source === "anchor" ? 1 : 0
+    };
+  }
+
+  function isFloaterUrl(url) {
+    try {
+      const parsed = new URL(String(url || ""), location.href);
+      return parsed.hostname === "oundhertobeconsist.org" && /^\/floater(?:\/|$)/i.test(parsed.pathname);
+    } catch (error) {
+      return false;
+    }
   }
 
   function installClickInterceptor() {

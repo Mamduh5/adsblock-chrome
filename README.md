@@ -141,6 +141,13 @@ The remaining two-click popunder budget is cleared by exact key, not by broad co
 
 The final centered iframe family is removed by structure rather than URL: `sandbox` must contain `allow-popups`, `position` must be fixed, `top/left` must be `50%`, transform must include `translate(-50%, -50%)`, z-index must be at least `2147483647`, and dimensions must be popup-like. Nearby fixed high-z empty div fragments are also removed when they match small or popup-wrapper geometry.
 
+The remaining invisible popunder is blocked at request/navigation level:
+
+- DNR rule `9` blocks Mangakakalot-initiated requests to `oundhertobeconsist.org/floater` across `main_frame`, `sub_frame`, `script`, `xmlhttprequest`, `ping`, `image`, and `other`
+- DNR rule `10` blocks top-level navigation to `||oundhertobeconsist.org/floater` even if Chrome does not preserve the Mangakakalot initiator on a new tab
+- MAIN-world `page_guard.js` blocks the same endpoint through `window.open`, programmatic anchor opens, `location.assign`, `location.replace`, attempted `location.href`, `fetch`, `XMLHttpRequest.open/send`, and `navigator.sendBeacon`
+- Query strings are intentionally not exact-matched because `cs=...` rotates; the stable host/path is `oundhertobeconsist.org/floater`
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.

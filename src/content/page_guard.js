@@ -25,6 +25,7 @@
   }
 
   installChapterClickShield(profile);
+  installChapterRequestGuards(profile);
   patchLocationMethods(profile);
   patchLocationHref(profile);
 
@@ -92,6 +93,66 @@
     };
   }
 
+  function installChapterRequestGuards(activeProfile) {
+    if (detectPageType(activeProfile) !== "chapter") {
+      return;
+    }
+    patchFetch(activeProfile);
+    patchXhr(activeProfile);
+    patchSendBeacon(activeProfile);
+  }
+
+  function patchFetch(activeProfile) {
+    if (typeof window.fetch !== "function") {
+      return;
+    }
+    const originalFetch = window.fetch;
+    window.fetch = function guardedFetch(input, init) {
+      const url = requestUrl(input);
+      if (isFloaterUrl(url)) {
+        dispatchFloaterBlocked(activeProfile, "fetch", url);
+        return Promise.reject(new TypeError("Site Shield blocked floater fetch"));
+      }
+      return originalFetch.call(this, input, init);
+    };
+  }
+
+  function patchXhr(activeProfile) {
+    if (typeof XMLHttpRequest !== "function") {
+      return;
+    }
+    const originalOpen = XMLHttpRequest.prototype.open;
+    const originalSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function guardedXhrOpen(method, url) {
+      this.__siteShieldUrl = String(url || "");
+      this.__siteShieldFloaterBlocked = isFloaterUrl(url);
+      if (this.__siteShieldFloaterBlocked) {
+        dispatchFloaterBlocked(activeProfile, "xhr", url);
+      }
+      return originalOpen.apply(this, arguments);
+    };
+    XMLHttpRequest.prototype.send = function guardedXhrSend() {
+      if (this.__siteShieldFloaterBlocked) {
+        return undefined;
+      }
+      return originalSend.apply(this, arguments);
+    };
+  }
+
+  function patchSendBeacon(activeProfile) {
+    if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") {
+      return;
+    }
+    const originalBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function guardedSendBeacon(url, data) {
+      if (isFloaterUrl(url)) {
+        dispatchFloaterBlocked(activeProfile, "beacon", url);
+        return false;
+      }
+      return originalBeacon(url, data);
+    };
+  }
+
   function installChapterClickShield(activeProfile) {
     const pageType = detectPageType(activeProfile);
     const rules = activeProfile.pageRules && activeProfile.pageRules[pageType];
@@ -147,12 +208,13 @@
     const clickable = target.closest("a[href], button, [role='button'], [onclick], [data-href], [data-url]");
     const url = clickable ? clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || "" : "";
     const junk = url && isPageJunkUrl(activeProfile, url);
+    const floater = url && isFloaterUrl(url);
     const offsite = url && isOffsiteUrl(activeProfile, url);
     const readerClick = Boolean(rules.shieldPlainReaderClicks && isInsideReaderArea(rules, target));
     const plainChapterClick = Boolean(rules.shieldPlainChapterClicks && !url);
     const largeSurface = isLargeClickSurface(target);
 
-    if (!junk && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
+    if (!junk && !floater && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
       return;
     }
 
@@ -173,7 +235,7 @@
         afterMutationBurst: isAfterMutationBurst(activeProfile),
         url: String(url || ""),
         host: url ? getUrlHost(url) : "",
-        reason: junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
+        reason: floater ? "floater_anchor" : junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
         target: describeElement(target)
       }
     }));
@@ -400,7 +462,8 @@
   }
 
   function shouldBlockNavigation(activeProfile, url) {
-    return isSuspiciousUrl(activeProfile, url)
+    return isFloaterUrl(url)
+      || isSuspiciousUrl(activeProfile, url)
       || (isGuardedClickWindow(activeProfile) && isOffsiteUrl(activeProfile, url));
   }
 
@@ -438,6 +501,40 @@
     } catch (error) {
       return "";
     }
+  }
+
+  function requestUrl(input) {
+    if (typeof input === "string" || input instanceof URL) {
+      return String(input);
+    }
+    if (input && typeof input.url === "string") {
+      return input.url;
+    }
+    return "";
+  }
+
+  function isFloaterUrl(url) {
+    try {
+      const parsed = new URL(String(url || ""), location.href);
+      return parsed.hostname === "oundhertobeconsist.org" && /^\/floater(?:\/|$)/i.test(parsed.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function dispatchFloaterBlocked(activeProfile, source, url) {
+    window.dispatchEvent(new CustomEvent("site-shield-floater-blocked", {
+      detail: {
+        profileId: activeProfile.id,
+        action: "block",
+        source,
+        url: String(url || ""),
+        host: getUrlHost(url),
+        clickCount: shieldState.clickCount,
+        clickSerial: shieldState.clickSerial,
+        afterMutationBurst: isAfterMutationBurst(activeProfile)
+      }
+    }));
   }
 
   function describeElement(node) {

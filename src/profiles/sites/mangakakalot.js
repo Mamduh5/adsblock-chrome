@@ -32,7 +32,8 @@
       6,
       7,
       8,
-      9
+      9,
+      10
     ],
     hardBlockHosts: [
       "ad-maven.com",

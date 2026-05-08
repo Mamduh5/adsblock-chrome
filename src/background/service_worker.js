@@ -54,6 +54,13 @@ const perfCounters = {
   readerInjectedAdBlockRemoved: 0,
   hiddenOnlyFallbackCount: 0,
   floaterRequestBlocked: 0,
+  floaterMainFrameBlocked: 0,
+  floaterFetchBlocked: 0,
+  floaterXhrBlocked: 0,
+  floaterBeaconBlocked: 0,
+  floaterWindowOpenBlocked: 0,
+  floaterLocationBlocked: 0,
+  floaterAnchorBlocked: 0,
   centeredPopupIframeRemoved: 0,
   popupSiblingFixedDivRemoved: 0,
   remainingBudgetKeysCleared: 0,
@@ -97,8 +104,11 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     }
 
     incrementStats(profile.id, { blockedRequests: 1 });
-    if (event.rule.ruleId === 9) {
-      mergePerfCounters({ floaterRequestBlocked: 1 });
+    if (event.rule.ruleId === 9 || event.rule.ruleId === 10) {
+      mergePerfCounters({
+        floaterRequestBlocked: 1,
+        floaterMainFrameBlocked: event.request.type === "main_frame" ? 1 : 0
+      });
     } else if (event.rule.ruleId === 7) {
       mergePerfCounters({ admavenOrClckLoaderBlocked: 1 });
     }
@@ -974,6 +984,13 @@ function mergePerfCounters(delta) {
     "readerInjectedAdBlockRemoved",
     "hiddenOnlyFallbackCount",
     "floaterRequestBlocked",
+    "floaterMainFrameBlocked",
+    "floaterFetchBlocked",
+    "floaterXhrBlocked",
+    "floaterBeaconBlocked",
+    "floaterWindowOpenBlocked",
+    "floaterLocationBlocked",
+    "floaterAnchorBlocked",
     "centeredPopupIframeRemoved",
     "popupSiblingFixedDivRemoved",
     "remainingBudgetKeysCleared",

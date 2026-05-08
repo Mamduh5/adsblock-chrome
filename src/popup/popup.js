@@ -318,6 +318,8 @@
       + " centered iframes, "
       + String(perf.remainingBudgetKeysCleared || 0)
       + " budget keys, "
+      + String(perf.floaterRequestBlocked || 0)
+      + " floater blocked, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)

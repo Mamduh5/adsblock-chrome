@@ -111,6 +111,7 @@ vm.runInContext(
   assert(profile.hardBlockHosts.includes("yougetwhatyoupayfor.net"), "profile should hard-block confirmed ad bootstrap host");
   assert(profile.hardBlockHosts.includes("chubbyexemplaryhardiness.com"), "profile should hard-block remaining popunder host");
   assert(profile.staticRuleIds.includes(9), "profile should own final popunder static DNR rules");
+  assert(profile.staticRuleIds.includes(10), "profile should own top-level floater navigation DNR rule");
   assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
