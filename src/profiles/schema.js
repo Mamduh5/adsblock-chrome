@@ -132,6 +132,8 @@
         readerInjectedAdSelectors: normalizeList(rules && rules.readerInjectedAdSelectors || []),
         remainingBudgetKeys: normalizeList(rules && rules.remainingBudgetKeys || []),
         defaultDenyOffsiteNavigation: Boolean(rules && rules.defaultDenyOffsiteNavigation),
+        blockPopupOpenByDefault: Boolean(rules && rules.blockPopupOpenByDefault),
+        popupAllowSameOriginPaths: normalizeList(rules && rules.popupAllowSameOriginPaths || []),
         offsiteNavigationDenyHosts: normalizeHostList(rules && rules.offsiteNavigationDenyHosts || []),
         offsiteNavigationAllowHosts: normalizeHostList(rules && rules.offsiteNavigationAllowHosts || []),
         affiliateHintHosts: normalizeHostList(rules && rules.affiliateHintHosts || []),

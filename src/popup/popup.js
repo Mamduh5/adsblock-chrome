@@ -326,6 +326,12 @@
       + " offsite opens, "
       + String(perf.offsiteTopNavigationBlocked || 0)
       + " offsite navs, "
+      + String(perf.popupOpenBlocked || 0)
+      + " popup opens, "
+      + String(perf.blankPopupStubReturned || 0)
+      + " blank stubs, "
+      + String(perf.popupReuseAttemptBlocked || 0)
+      + " popup reuse blocked, "
       + String(perf.affiliateHostBlocked || 0)
       + " affiliate hits, "
       + String(perf.cloudfrontLoaderBlocked || 0)

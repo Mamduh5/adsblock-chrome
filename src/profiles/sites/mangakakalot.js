@@ -33,7 +33,8 @@
       7,
       8,
       9,
-      10
+      10,
+      11
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -234,7 +235,8 @@
           "clicks.pipaffiliates.com",
           "weiledsteverm.org",
           "ghabovethec.info",
-          "shopee.co.th"
+          "shopee.co.th",
+          "xm.com"
         ],
         hardHostKeywords: [
           "open88",
@@ -281,6 +283,7 @@
           "weiledsteverm.org",
           "ghabovethec.info",
           "shopee.co.th",
+          "xm.com",
           "open88",
           "fun88"
         ],
@@ -440,8 +443,11 @@
           "isAddHistory"
         ],
         defaultDenyOffsiteNavigation: true,
+        blockPopupOpenByDefault: true,
+        popupAllowSameOriginPaths: [],
         offsiteNavigationDenyHosts: [
           "shopee.co.th",
+          "xm.com",
           "clicks.pipaffiliates.com",
           "oundhertobeconsist.org",
           "weiledsteverm.org",
@@ -452,11 +458,13 @@
         affiliateHintHosts: [
           "s.shopee.co.th",
           "shopee.co.th",
+          "xm.com",
           "clicks.pipaffiliates.com",
           "oundhertobeconsist.org",
           "weiledsteverm.org",
           "ghabovethec.info",
-          "chubbyexemplaryhardiness.com"
+          "chubbyexemplaryhardiness.com",
+          "d2dxy39sqorbhv.cloudfront.net"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",

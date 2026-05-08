@@ -103,6 +103,7 @@ vm.runInContext(
 (async () => {
   const internals = context.SiteShieldBackgroundInternals;
   const profile = context.SiteShieldProfiles.getById("mangakakalot");
+  const staticRules = JSON.parse(fs.readFileSync(path.join(root, "rules/static_rules.json"), "utf8"));
 
   assert(profile, "Mangakakalot profile should be registered");
   assert(profile.pageTypes.chapter, "Mangakakalot profile should define chapter page type");
@@ -113,6 +114,8 @@ vm.runInContext(
   assert(profile.hardBlockHosts.includes("d2dxy39sqorbhv.cloudfront.net"), "profile should hard-block final cloudfront loader host");
   assert(profile.staticRuleIds.includes(9), "profile should own final popunder static DNR rules");
   assert(profile.staticRuleIds.includes(10), "profile should own top-level floater navigation DNR rule");
+  assert(profile.staticRuleIds.includes(11), "profile should own final CloudFront syxdd loader DNR rule");
+  assert(staticRules.some((rule) => rule.id === 11 && rule.condition.requestDomains.includes("d2dxy39sqorbhv.cloudfront.net")), "static DNR should include host-level CloudFront syxdd loader rule");
   assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
@@ -134,7 +137,10 @@ vm.runInContext(
   assert(profile.pageRules.chapter.readerInjectedAdSelectors.some((selector) => selector.includes("max-height")), "chapter rules should include reader-injected ad block selectors");
   assert(profile.pageRules.chapter.remainingBudgetKeys.includes("__PPU_ppucnt"), "chapter rules should include exact popunder storage budget keys");
   assert.strictEqual(profile.pageRules.chapter.defaultDenyOffsiteNavigation, true, "chapter rules should default-deny off-site navigation");
+  assert.strictEqual(profile.pageRules.chapter.blockPopupOpenByDefault, true, "chapter rules should default-deny popup creation");
+  assert(Array.isArray(profile.pageRules.chapter.popupAllowSameOriginPaths), "chapter rules should expose popup same-origin allowlist");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("shopee.co.th"), "chapter rules should deny direct Shopee affiliate opens");
+  assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("xm.com"), "chapter rules should deny direct XM affiliate opens");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("clicks.pipaffiliates.com"), "chapter rules should deny affiliate click hosts");
   assert(profile.pageRules.chapter.affiliateHintHosts.includes("s.shopee.co.th"), "chapter rules should remove affiliate resource hints");
   assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("d2dxy39sqorbhv.cloudfront.net")), "chapter rules should include final cloudfront loader");

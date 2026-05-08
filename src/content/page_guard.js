@@ -44,9 +44,9 @@
           }
         }));
       }
-      if (isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url)) {
+      if (shouldBlockWindowOpen(activeProfile, url)) {
         const attempt = markBlockedOpenAttempt();
-        const details = blockDetails(activeProfile, url, "window_open");
+        const details = blockDetails(activeProfile, url, "window_open", target, features);
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
           detail: Object.assign(details, {
             profileId: activeProfile.id,
@@ -54,6 +54,7 @@
             target: String(target || ""),
             action: "block",
             source: "window_open",
+            fakePopupReturned: true,
             clickCount: shieldState.clickCount,
             clickSerial: shieldState.clickSerial,
             duplicateAttempt: attempt.duplicateAttempt,
@@ -61,7 +62,7 @@
             afterMutationBurst: isAfterMutationBurst(activeProfile)
           })
         }));
-        return null;
+        return createFakePopupWindow();
       }
       return originalOpen.call(window, url, target, features);
     };
@@ -475,6 +476,38 @@
     return rawUrl === "" || /^about:blank(?:[#?].*)?$/i.test(rawUrl);
   }
 
+  function shouldBlockWindowOpen(activeProfile, url) {
+    const pageType = detectPageType(activeProfile);
+    if (pageType !== "chapter") {
+      return isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url);
+    }
+
+    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    if (rules.blockPopupOpenByDefault !== false && !isAllowedChapterPopup(activeProfile, url)) {
+      return true;
+    }
+    return isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url);
+  }
+
+  function isAllowedChapterPopup(activeProfile, url) {
+    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    const allowPaths = rules.popupAllowSameOriginPaths || [];
+    if (!allowPaths.length) {
+      return false;
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(String(url || ""), location.href);
+    } catch (error) {
+      return false;
+    }
+    if (!profiles.profileMatchesHostname(activeProfile, parsed.hostname)) {
+      return false;
+    }
+    return allowPaths.some((pathPrefix) => parsed.pathname.startsWith(String(pathPrefix || "")));
+  }
+
   function shouldBlockNavigation(activeProfile, url) {
     const pageType = detectPageType(activeProfile);
     if (isFloaterUrl(url) || isSuspiciousUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url)) {
@@ -509,22 +542,103 @@
     return (rules.offsiteNavigationAllowHosts || []).some((allowHost) => heuristics.isSubdomainOrSame(host, allowHost));
   }
 
-  function blockDetails(activeProfile, url, source) {
+  function blockDetails(activeProfile, url, source, target, features) {
     const rawUrl = String(url || "");
     const host = getUrlHost(url);
     const blankPopup = source === "window_open" && isBlockedBlankPopup(activeProfile, url);
     const floater = isFloaterUrl(url);
     const affiliateHost = isAffiliateNavigationUrl(activeProfile, url);
     const offsite = Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
+    const sameOrigin = Boolean(host && profiles.profileMatchesHostname(activeProfile, host));
     return {
       host,
       blankPopup,
       floater,
       affiliateHost,
       offsite,
-      reason: blankPopup ? "blank_popup" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "suspicious_navigation",
+      sameOrigin,
+      popupDefaultDenied: source === "window_open" && detectPageType(activeProfile) === "chapter",
+      reason: blankPopup ? "blank_popup" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "popup_default_deny",
+      rawArgs: [
+        trimArg(url),
+        trimArg(target),
+        trimArg(features)
+      ],
       url: rawUrl
     };
+  }
+
+  function trimArg(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, 160);
+  }
+
+  function createFakePopupWindow() {
+    const noop = function siteShieldNoop() {};
+    const locationStub = {};
+    try {
+      Object.defineProperties(locationStub, {
+        href: { configurable: true, enumerable: true, get: () => "about:blank", set: noop },
+        assign: { configurable: true, enumerable: true, value: noop },
+        replace: { configurable: true, enumerable: true, value: noop },
+        reload: { configurable: true, enumerable: true, value: noop },
+        toString: { configurable: true, value: () => "about:blank" }
+      });
+    } catch (error) {
+      return null;
+    }
+
+    const documentStub = {
+      open: noop,
+      close: noop,
+      write: noop,
+      writeln: noop
+    };
+    const popupStub = {
+      closed: false,
+      opener: null,
+      location: locationStub,
+      document: documentStub,
+      focus: noop,
+      blur: noop,
+      close: noop,
+      postMessage: noop
+    };
+    popupStub.self = popupStub;
+    popupStub.window = popupStub;
+    popupStub.top = popupStub;
+    popupStub.parent = popupStub;
+
+    try {
+      Object.defineProperty(popupStub, "location", {
+        configurable: true,
+        enumerable: true,
+        get: () => locationStub,
+        set: noop
+      });
+    } catch (error) {
+      return popupStub;
+    }
+
+    if (typeof Proxy !== "function") {
+      return popupStub;
+    }
+    return new Proxy(popupStub, {
+      get(target, prop) {
+        if (prop in target) {
+          return target[prop];
+        }
+        if (prop === Symbol.toStringTag) {
+          return "Window";
+        }
+        return noop;
+      },
+      set() {
+        return true;
+      },
+      has() {
+        return true;
+      }
+    });
   }
 
   function isFirstPartyUrl(url) {

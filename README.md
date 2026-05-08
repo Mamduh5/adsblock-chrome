@@ -151,9 +151,12 @@ The remaining invisible popunder is blocked at request/navigation level:
 The final affiliate-tab bypass is handled with a chapter-page default-deny policy:
 
 - `pageRules.chapter.defaultDenyOffsiteNavigation` blocks off-site `window.open`, programmatic anchor opens, and location navigation from chapter pages unless explicitly allowlisted.
+- `pageRules.chapter.blockPopupOpenByDefault` blocks all `window.open(...)` calls on chapter pages unless a same-origin path is explicitly added to `popupAllowSameOriginPaths`.
+- Blocked `window.open` calls return a fake window-like stub instead of `null`, so page code can call `focus`, `close`, `postMessage`, `document.write`, `location.assign`, `location.replace`, or assign `location.href` without receiving a real tab it can later reuse.
 - `window.open("", ...)`, `window.open("about:blank", ...)`, and missing/null popup URLs are blocked on chapter pages because the ad stack can open a blank tab first and navigate it later.
-- Affiliate/popunder hosts are denied in the page guard: `clicks.pipaffiliates.com`, `oundhertobeconsist.org`, `weiledsteverm.org`, `ghabovethec.info`, `chubbyexemplaryhardiness.com`, and direct `shopee.co.th` affiliate opens.
+- Affiliate/popunder hosts are denied in the page guard: `clicks.pipaffiliates.com`, `oundhertobeconsist.org`, `weiledsteverm.org`, `ghabovethec.info`, `chubbyexemplaryhardiness.com`, `xm.com`, and direct `shopee.co.th` affiliate opens.
 - Resource hints such as `preconnect` and `dns-prefetch` to those affiliate hosts are removed on chapter pages.
+- DNR rule `11` is a host-level script block for `d2dxy39sqorbhv.cloudfront.net`, covering the protocol-relative `//d2dxy39sqorbhv.cloudfront.net/?syxdd=1257018` loader without depending on the query suffix.
 
 ## Runtime Model
 

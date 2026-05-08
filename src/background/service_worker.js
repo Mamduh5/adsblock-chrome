@@ -65,6 +65,10 @@ const perfCounters = {
   offsiteWindowOpenBlocked: 0,
   offsiteTopNavigationBlocked: 0,
   affiliateHostBlocked: 0,
+  popupOpenBlocked: 0,
+  blankPopupStubReturned: 0,
+  offsitePopupStubReturned: 0,
+  popupReuseAttemptBlocked: 0,
   cloudfrontLoaderBlocked: 0,
   chubbyLoaderBlocked: 0,
   centeredPopupIframeRemoved: 0,
@@ -117,7 +121,7 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
       });
     } else if (event.rule.ruleId === 7) {
       mergePerfCounters({ admavenOrClckLoaderBlocked: 1 });
-    } else if (event.rule.ruleId === 6) {
+    } else if (event.rule.ruleId === 6 || event.rule.ruleId === 11) {
       const requestHost = heuristics.getUrlHostname(event.request.url);
       mergePerfCounters({
         cloudfrontLoaderBlocked: requestHost === "d2dxy39sqorbhv.cloudfront.net" ? 1 : 0,
@@ -1007,6 +1011,10 @@ function mergePerfCounters(delta) {
     "offsiteWindowOpenBlocked",
     "offsiteTopNavigationBlocked",
     "affiliateHostBlocked",
+    "popupOpenBlocked",
+    "blankPopupStubReturned",
+    "offsitePopupStubReturned",
+    "popupReuseAttemptBlocked",
     "cloudfrontLoaderBlocked",
     "chubbyLoaderBlocked",
     "centeredPopupIframeRemoved",

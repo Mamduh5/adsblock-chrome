@@ -35,7 +35,8 @@
         "sunwin28.bz",
         "hi88s.com",
         "oherbuttheds.com",
-        "xml.oherbuttheds.com"
+        "xml.oherbuttheds.com",
+        "d2dxy39sqorbhv.cloudfront.net"
       ],
       "resourceTypes": [
         "font",
@@ -239,6 +240,25 @@
       "urlFilter": "||oundhertobeconsist.org/floater",
       "resourceTypes": [
         "main_frame"
+      ]
+    }
+  },
+  {
+    "id": 11,
+    "priority": 20,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "requestDomains": [
+        "d2dxy39sqorbhv.cloudfront.net"
+      ],
+      "resourceTypes": [
+        "script"
       ]
     }
   }

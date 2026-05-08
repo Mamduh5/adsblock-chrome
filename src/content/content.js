@@ -68,6 +68,10 @@
       offsiteWindowOpenBlocked: 0,
       offsiteTopNavigationBlocked: 0,
       affiliateHostBlocked: 0,
+      popupOpenBlocked: 0,
+      blankPopupStubReturned: 0,
+      offsitePopupStubReturned: 0,
+      popupReuseAttemptBlocked: 0,
       cloudfrontLoaderBlocked: 0,
       chubbyLoaderBlocked: 0,
       centeredPopupIframeRemoved: 0,
@@ -219,7 +223,11 @@
       offsiteBlankPopupBlocked: detail.blankPopup ? 1 : 0,
       offsiteWindowOpenBlocked: source === "window_open" && (detail.offsite || affiliateHost || detail.blankPopup) ? 1 : 0,
       offsiteTopNavigationBlocked: source === "location_assign" || source === "location_replace" || source === "location_href" ? 1 : 0,
-      affiliateHostBlocked: affiliateHost ? 1 : 0
+      affiliateHostBlocked: affiliateHost ? 1 : 0,
+      popupOpenBlocked: source === "window_open" ? 1 : 0,
+      blankPopupStubReturned: source === "window_open" && detail.blankPopup && detail.fakePopupReturned ? 1 : 0,
+      offsitePopupStubReturned: source === "window_open" && detail.offsite && detail.fakePopupReturned ? 1 : 0,
+      popupReuseAttemptBlocked: source === "window_open" && detail.fakePopupReturned ? 1 : 0
     };
   }
 
@@ -2080,6 +2088,10 @@
         offsiteWindowOpenBlocked: 0,
         offsiteTopNavigationBlocked: 0,
         affiliateHostBlocked: 0,
+        popupOpenBlocked: 0,
+        blankPopupStubReturned: 0,
+        offsitePopupStubReturned: 0,
+        popupReuseAttemptBlocked: 0,
         cloudfrontLoaderBlocked: 0,
         chubbyLoaderBlocked: 0,
         centeredPopupIframeRemoved: 0,
