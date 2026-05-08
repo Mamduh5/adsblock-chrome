@@ -42,6 +42,8 @@
       footerJunkGroupsRemoved: 0,
       popupLayersRemoved: 0,
       popupLayersReremoved: 0,
+      popupCardsMatched: 0,
+      popupBackdropsNeutralized: 0,
       orphanXRemoved: 0,
       rearmedHijackAttemptsBlocked: 0,
       expensiveScansSkipped: 0
@@ -309,7 +311,11 @@
       "[class*='notification' i]",
       "[id*='notification' i]",
       "[class*='overlay' i]",
-      "[id*='overlay' i]"
+      "[id*='overlay' i]",
+      "[style*='linear-gradient' i]",
+      "[style*='flex-direction: column' i]",
+      "[style*='border-radius: 16px' i]",
+      "[style*='border-radius:16px' i]"
     ].join(",");
     try {
       return node.matches(selector) || Boolean(node.querySelector(selector));
@@ -600,32 +606,44 @@
     );
     let removed = 0;
     let reremoved = 0;
+    let cardsMatched = 0;
+    let backdropsNeutralized = 0;
 
     for (const node of candidates) {
       if (!(node instanceof HTMLElement) || state.removedNodes.has(node)) {
         continue;
       }
-      if (!isChapterPopupLayerSignal(node)) {
+      const signal = chapterPopupLayerSignal(node);
+      if (!signal) {
         continue;
       }
 
-      const target = findChapterPopupLayerContainer(node);
+      if (signal === "promo_card") {
+        cardsMatched += 1;
+      }
+
+      const match = findChapterPopupLayerContainer(node);
+      const target = match.node;
       if (!target || state.removedNodes.has(target) || isProtectedChapterNode(target)) {
         continue;
       }
 
       const wasReremoved = Number(document.documentElement.dataset.siteShieldPopupRemoved || "0") > 0;
-      hideNode(target, "chapter-popup-layer", popupLayerDetails(target, node, wasReremoved));
+      hideNode(target, "chapter-popup-layer", popupLayerDetails(target, node, wasReremoved, signal, match.depth));
       document.documentElement.dataset.siteShieldPopupRemoved = String(Number(document.documentElement.dataset.siteShieldPopupRemoved || "0") + 1);
       removed += 1;
       reremoved += wasReremoved ? 1 : 0;
-      removed += neutralizePopupBackdrops(target, roots, wasReremoved);
+      const backdropCount = neutralizePopupBackdrops(target, roots, wasReremoved, signal);
+      removed += backdropCount;
+      backdropsNeutralized += backdropCount;
     }
 
     if (removed > 0) {
       addPerfDelta({
         popupLayersRemoved: removed,
-        popupLayersReremoved: reremoved
+        popupLayersReremoved: reremoved,
+        popupCardsMatched: cardsMatched,
+        popupBackdropsNeutralized: backdropsNeutralized
       });
     }
     return removed;
@@ -638,37 +656,70 @@
       "[class*='notification' i]",
       "[id*='notification' i]",
       "[role='dialog']",
-      "[aria-modal='true']"
+      "[aria-modal='true']",
+      "[style*='linear-gradient' i]",
+      "[style*='flex-direction: column' i]",
+      "[style*='border-radius: 16px' i]",
+      "[style*='border-radius:16px' i]"
     ]);
     return heuristics.safeSelectorList(selectors).join(",") || "[role='dialog']";
   }
 
   function isChapterPopupLayerSignal(node) {
+    return Boolean(chapterPopupLayerSignal(node));
+  }
+
+  function chapterPopupLayerSignal(node) {
     const text = trimText(node.textContent).toLowerCase();
     if (text.includes("content notification") || /^cancel$/i.test(text)) {
-      return true;
+      return "content_notification";
+    }
+    if (isPromoCardSignature(node)) {
+      return "promo_card";
     }
     if (looksAdNamed(node) && node.querySelector("button, a, [role='button']")) {
-      return true;
+      return "ad_named_popup";
     }
-    return false;
+    return "";
+  }
+
+  function isPromoCardSignature(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    const text = trimText(node.textContent).toLowerCase();
+    const hasPromoTerm = (state.pageRules.popupPromoTextTerms || []).some((term) => text.includes(String(term).toLowerCase()));
+    const hasCta = Boolean(node.querySelector("a[href], button, [role='button']")) || /\b(click here|play now|claim|join|start)\b/i.test(text);
+    if (!hasPromoTerm || !hasCta) {
+      return false;
+    }
+    const style = getComputedStyle(node);
+    const inline = node.getAttribute("style") || "";
+    const gradient = /linear-gradient/i.test(inline) || /gradient/i.test(style.backgroundImage || "");
+    const flexColumn = style.display === "flex" && style.flexDirection === "column";
+    const rounded = Number.parseFloat(style.borderRadius) >= 10 || /border-radius\s*:\s*1[2-9]px/i.test(inline);
+    const darkCard = /rgb\(15\s+17\s+34|rgba?\(\s*15\s*,\s*17\s*,\s*34/i.test(inline + " " + style.backgroundColor + " " + style.backgroundImage);
+    const rect = node.getBoundingClientRect();
+    return rect.width >= 180 && rect.height >= 80 && ((gradient && flexColumn) || (darkCard && rounded) || (flexColumn && rounded));
   }
 
   function findChapterPopupLayerContainer(node) {
     let current = node;
     let best = node;
     let depth = 0;
+    let bestDepth = 0;
     while (current instanceof HTMLElement && current !== document.body && depth < 5) {
       if (isProtectedChapterNode(current)) {
-        return best;
+        return { node: best, depth: bestDepth };
       }
       if (isLikelyPopupContainer(current)) {
         best = current;
+        bestDepth = depth;
       }
       current = current.parentElement;
       depth += 1;
     }
-    return best;
+    return { node: best, depth: bestDepth };
   }
 
   function isLikelyPopupContainer(node) {
@@ -681,17 +732,28 @@
     const positioned = style.position === "fixed" || style.position === "absolute" || style.position === "sticky";
     return text.includes("content notification")
       || (text.includes("cancel") && looksAdNamed(node))
+      || isPromoCardWrapper(node)
       || (positioned && rect.width >= 160 && rect.height >= 60 && looksAdNamed(node));
   }
 
-  function neutralizePopupBackdrops(container, roots, wasReremoved) {
+  function isPromoCardWrapper(node) {
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    const text = trimText(node.textContent).toLowerCase();
+    const hasPromoTerm = (state.pageRules.popupPromoTextTerms || []).some((term) => text.includes(String(term).toLowerCase()));
+    const positioned = style.position === "fixed" || style.position === "absolute" || style.position === "relative";
+    return hasPromoTerm && positioned && rect.width >= 180 && rect.height >= 80 && rect.width <= window.innerWidth;
+  }
+
+  function neutralizePopupBackdrops(container, roots, wasReremoved, signal) {
     const rules = state.pageRules || {};
     const selector = heuristics.safeSelectorList(rules.popupBackdropSelectors || []).join(",");
     if (!selector) {
       return 0;
     }
     let removed = 0;
-    const candidates = queryWithinRoots(roots, selector, 20);
+    const scanRoots = uniqueElements(roots.concat([document.documentElement]));
+    const candidates = queryWithinRoots(scanRoots, selector, 20);
     for (const node of candidates) {
       if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || node === container || container.contains(node)) {
         continue;
@@ -699,7 +761,7 @@
       if (!isPopupBackdrop(node)) {
         continue;
       }
-      hideNode(node, "chapter-popup-backdrop", popupLayerDetails(node, container, wasReremoved));
+      hideNode(node, "chapter-popup-backdrop", popupLayerDetails(node, container, wasReremoved, signal, 0));
       removed += 1;
     }
     return removed;
@@ -719,11 +781,13 @@
       && !node.querySelector("img, picture, canvas, video, select, form, textarea");
   }
 
-  function popupLayerDetails(node, triggerNode, wasReremoved) {
+  function popupLayerDetails(node, triggerNode, wasReremoved, signal, ancestorDepth) {
     return {
       action: "block",
       pageType: state.pageType,
       reason: wasReremoved ? "popup_layer_reinserted" : "popup_layer",
+      signal,
+      ancestorDepth,
       node: describeNode(node),
       trigger: describeNode(triggerNode),
       text: trimText(triggerNode.textContent),
@@ -1197,7 +1261,7 @@
     if (actionable) {
       const url = actionable.getAttribute("href") || actionable.getAttribute("data-href") || actionable.getAttribute("data-url") || "";
       if (!url) {
-        return false;
+        return Boolean(state.pageRules.shieldPlainChapterClicks);
       }
       const urlHost = heuristics.getUrlHostname(url, location.href);
       return Boolean(urlHost && !profiles.profileMatchesHostname(state.profile, urlHost)) || isChapterJunkUrl(url);
@@ -1418,6 +1482,8 @@
         footerJunkGroupsRemoved: 0,
         popupLayersRemoved: 0,
         popupLayersReremoved: 0,
+        popupCardsMatched: 0,
+        popupBackdropsNeutralized: 0,
         orphanXRemoved: 0,
         rearmedHijackAttemptsBlocked: 0,
         expensiveScansSkipped: 0

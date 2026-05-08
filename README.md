@@ -114,6 +114,8 @@ Footer/bottom junk is handled by targeted chapter anchor scans for confirmed jun
 
 The chapter profile has a dedicated popup-layer remover for `content notification` / `CANCEL` style blockers. It looks for notification/dialog nodes, climbs only a few ancestors to find the small popup container, hides it, and then neutralizes likely fixed-position backdrops around it. A throttled scroll/timer check repeats this narrow popup scan so mutation-, scroll-, or timer-triggered reinsertions are removed again without rerunning the full DOM cleanup.
 
+The same remover also has a Mangakakalot promo-card signature for the gambling-style modal seen on chapter pages: dark gradient/flex-column/rounded-card style clues plus CTA text such as `free spins`, `no deposit`, `click here`, or `casino`. When that inner card matches, the content script climbs the nearby wrapper chain and also scans a bounded set of fixed/absolute backdrop candidates from the document root, so the card and its dimmer/click-catcher are removed together.
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.

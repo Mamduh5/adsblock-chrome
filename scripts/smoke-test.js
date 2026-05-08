@@ -114,6 +114,8 @@ vm.runInContext(
   assert(profile.pageRules.chapter.orphanSelectors.length > 0, "chapter rules should include orphan cleanup selectors");
   assert(profile.pageRules.chapter.popupLayerSelectors.length > 0, "chapter rules should include popup layer selectors");
   assert(profile.pageRules.chapter.popupBackdropSelectors.length > 0, "chapter rules should include popup backdrop selectors");
+  assert(profile.pageRules.chapter.popupLayerSelectors.some((selector) => selector.includes("linear-gradient")), "chapter popup selectors should include promo-card style signature");
+  assert(profile.pageRules.chapter.popupPromoTextTerms.includes("free spins"), "chapter popup rules should include gambling promo terms");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");

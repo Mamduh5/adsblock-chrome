@@ -304,7 +304,11 @@
           "[class*='notification' i]",
           "[id*='notification' i]",
           "[role='dialog']",
-          "[aria-modal='true']"
+          "[aria-modal='true']",
+          "[style*='linear-gradient' i]",
+          "[style*='flex-direction: column' i]",
+          "[style*='border-radius: 16px' i]",
+          "[style*='border-radius:16px' i]"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",
@@ -315,6 +319,16 @@
           "[id*='modal' i]",
           "[style*='position: fixed' i]",
           "[style*='position:fixed' i]"
+        ],
+        popupPromoTextTerms: [
+          "free spins",
+          "no deposit",
+          "click here",
+          "casino",
+          "bonus",
+          "bet",
+          "win now",
+          "play now"
         ],
         removalContainerSelectors: [
           "p",

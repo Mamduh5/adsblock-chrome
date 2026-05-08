@@ -304,6 +304,8 @@
       + " footer groups removed, "
       + String(perf.popupLayersRemoved || 0)
       + " popups removed, "
+      + String(perf.popupBackdropsNeutralized || 0)
+      + " backdrops removed, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)

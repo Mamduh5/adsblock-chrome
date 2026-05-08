@@ -121,6 +121,7 @@
         orphanTextTerms: normalizeList(rules && rules.orphanTextTerms || []),
         popupLayerSelectors: normalizeList(rules && rules.popupLayerSelectors || []),
         popupBackdropSelectors: normalizeList(rules && rules.popupBackdropSelectors || []),
+        popupPromoTextTerms: normalizeList(rules && rules.popupPromoTextTerms || []),
         removalContainerSelectors: normalizeList(rules && rules.removalContainerSelectors || []),
         maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80),
         maxOverlayScansPerPass: Number(rules && rules.maxOverlayScansPerPass || 120),
