@@ -26,13 +26,19 @@
     staticRuleIds: [],
     hardBlockHosts: [
       "t.ly",
-      "ibit.ly"
+      "ibit.ly",
+      "cutt.ly",
+      "cutly.cloud",
+      "rebrand.ly",
+      "ccx1.net"
     ],
     candidateBlockHosts: [],
     hardDomSelectors: [],
     candidateDomSelectors: [
       "#asplayer",
       "#custom-promo-popup-overlay",
+      "#custom-promo-popup-home-1",
+      ".custom-promo-overlay",
       "#first-gate",
       "#ad-overlay.click-overlay",
       "#sticky-banner-center",
@@ -110,10 +116,82 @@
       }
     },
     pageRules: {
+      home: {
+        hardBlockHosts: [
+          "t.ly",
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
+        ],
+        hardHostKeywords: [],
+        hardDomSelectors: [
+          "#custom-promo-popup-home-1",
+          "[id^='custom-promo-popup-home-']",
+          ".custom-promo-overlay",
+          ".custom-popup-content",
+          "#close-home-1",
+          "[id^='close-home-']",
+          ".custom-popup-close",
+          "img[src*='ball.gif' i][alt*='promo' i]"
+        ],
+        protectedSelectors: [
+          "article",
+          "article a[href]",
+          ".post",
+          ".post a[href]",
+          ".post-list",
+          ".post-grid",
+          ".entry-title",
+          ".post-title"
+        ],
+        adContainerSelectors: [
+          "#custom-promo-popup-home-1",
+          "[id^='custom-promo-popup-home-']",
+          ".custom-promo-overlay",
+          ".custom-popup-content",
+          "img[src*='ball.gif' i][alt*='promo' i]"
+        ],
+        remainingBudgetKeys: [],
+        defaultDenyOffsiteNavigation: false,
+        blockPopupOpenByDefault: false,
+        offsiteNavigationDenyHosts: [
+          "t.ly",
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
+        ],
+        affiliateHintHosts: [
+          "t.ly",
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
+        ],
+        clickShieldEnabled: true,
+        clickShieldEvents: [
+          "pointerdown",
+          "mousedown",
+          "click",
+          "auxclick"
+        ],
+        shieldPlainReaderClicks: false,
+        shieldPlainChapterClicks: false,
+        safeNavigateFirstPartyAnchors: true,
+        shieldMutationBurstMs: 1200
+      },
       watch: {
         hardBlockHosts: [
           "t.ly",
-          "ibit.ly"
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
         ],
         hardHostKeywords: [],
         hardDomSelectors: [
@@ -237,11 +315,19 @@
         blockPopupOpenByDefault: false,
         offsiteNavigationDenyHosts: [
           "t.ly",
-          "ibit.ly"
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
         ],
         affiliateHintHosts: [
           "t.ly",
-          "ibit.ly"
+          "ibit.ly",
+          "cutt.ly",
+          "cutly.cloud",
+          "rebrand.ly",
+          "ccx1.net"
         ],
         dynamicElementDenyHosts: [],
         clickShieldEnabled: true,

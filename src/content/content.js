@@ -105,7 +105,12 @@
       centerAffiliateBlockRemoved: 0,
       adsContainerMainRemoved: 0,
       sideSkyscraperRemoved: 0,
-      overlayReremoved: 0
+      overlayReremoved: 0,
+      watchCenterAffiliateBlockRemoved: 0,
+      homePopupRemoved: 0,
+      homeCenterAffiliateBlockRemoved: 0,
+      homePromoImageRemoved: 0,
+      adWrapperRemoved: 0
     },
     perfTimer: null,
     chapterClickCount: 0,
@@ -647,6 +652,9 @@
     if (isMamtpoWatchPage()) {
       removed += cleanupMamtpoWatchPage(roots);
     }
+    if (isMamtpoHomePage()) {
+      removed += cleanupMamtpoHomePage(roots);
+    }
     removed += removeBySelectors(roots);
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
@@ -682,6 +690,10 @@
     return state.profile && state.profile.id === "mamtpo" && state.pageType === "watch";
   }
 
+  function isMamtpoHomePage() {
+    return state.profile && state.profile.id === "mamtpo" && state.pageType === "home";
+  }
+
   function recordWatchPageDetected() {
     if (state.watchPageDetectedRecorded) {
       return;
@@ -701,6 +713,7 @@
     expirePageCookie("hide_promo_1111");
 
     let removed = 0;
+    removed += removeMamtpoCenterAffiliateBlocks("watch");
     removed += removeMamtpoSelectorGroup(roots, [
       "#asplayer"
     ], "mamtpo-preroll-branch", { prerollBranchBypassed: 1, prerollOverlayDisabled: 1 });
@@ -733,13 +746,13 @@
       ".ads-all-group",
       ".ads-item",
       ".ads-close-btn"
-    ], "mamtpo-ads-container-main", { adsContainerMainRemoved: 1 });
+    ], "mamtpo-ads-container-main", { adsContainerMainRemoved: 1, adWrapperRemoved: 1 });
     removed += removeMamtpoSelectorGroup(roots, [
       ".bcm-ads",
       "#sticky-banner-center",
       "#close-banner",
       ".dual-banner-wrapper"
-    ], "mamtpo-sticky-banner", { stickyBannerRemoved: 1 });
+    ], "mamtpo-sticky-banner", { stickyBannerRemoved: 1, adWrapperRemoved: 1 });
     removed += removeMamtpoSelectorGroup(roots, [
       ".player-layout-main-wrapper > .side-skyscraper",
       ".side-skyscraper",
@@ -750,10 +763,25 @@
       "div.ad-float",
       ".ad-close",
       ".promo-close"
-    ], "mamtpo-side-banner", { sideBannerRemoved: 1, sideSkyscraperRemoved: 1 });
-    removed += removeMamtpoCenterAffiliateBlocks();
+    ], "mamtpo-side-banner", { sideBannerRemoved: 1, sideSkyscraperRemoved: 1, adWrapperRemoved: 1 });
     removed += removeMamtpoAffiliateImageBlocks();
     preserveMamtpoMainPlayer();
+    return removed;
+  }
+
+  function cleanupMamtpoHomePage(roots) {
+    let removed = 0;
+    removed += removeMamtpoSelectorGroup(roots, [
+      "#custom-promo-popup-home-1",
+      "[id^='custom-promo-popup-home-']",
+      ".custom-promo-overlay",
+      ".custom-popup-content",
+      "#close-home-1",
+      "[id^='close-home-']",
+      ".custom-popup-close"
+    ], "mamtpo-home-popup", { homePopupRemoved: 1 });
+    removed += removeMamtpoCenterAffiliateBlocks("home");
+    removed += removeMamtpoHomePromoImages();
     return removed;
   }
 
@@ -806,17 +834,20 @@
       return "";
     }
     const id = String(node.id || "");
-    if (/^(asplayer|first-gate|ad-overlay|sticky-banner-center)$/i.test(id)) {
+    if (/^(asplayer|first-gate|ad-overlay|sticky-banner-center|custom-promo-popup-home-\d+|close-home-\d+)$/i.test(id)) {
       return "#" + id.toLowerCase();
     }
     const className = typeof node.className === "string" ? node.className : "";
-    for (const classKey of ["bcm-ads", "dual-banner-wrapper", "ads-container-main"]) {
+    for (const classKey of ["bcm-ads", "dual-banner-wrapper", "ads-container-main", "custom-promo-overlay", "custom-popup-content"]) {
       if (node.classList && node.classList.contains(classKey)) {
         return "." + classKey + ":" + describeNode(node);
       }
     }
     if (/click-overlay/i.test(className)) {
       return ".click-overlay:" + describeNode(node);
+    }
+    if (node.tagName === "CENTER" && (isMamtpoCenterAffiliateStack(node, state.pageType === "home" ? "home" : "watch") || countMamtpoExternalImageLinks(node) >= 2)) {
+      return "center-affiliate:" + node.querySelectorAll("a[href] > img").length + ":" + trimText(node.textContent);
     }
     return "";
   }
@@ -863,27 +894,27 @@
     return removed;
   }
 
-  function removeMamtpoCenterAffiliateBlocks() {
-    const centers = Array.from(document.querySelectorAll("article center, .entry-header center, .entry-content center, main center, center"));
+  function removeMamtpoHomePromoImages() {
     let removed = 0;
-    for (const center of centers) {
-      if (!(center instanceof HTMLElement) || !center.isConnected || state.removedNodes.has(center) || isMamtpoProtectedNode(center)) {
+    for (const image of document.querySelectorAll("img[src*='ball.gif' i][alt*='promo' i]")) {
+      if (!(image instanceof HTMLImageElement) || !image.isConnected || state.removedNodes.has(image)) {
         continue;
       }
-      if (!isMamtpoCenterAffiliateStack(center) || !isMamtpoNearPlayerArea(center)) {
+      const target = closestMamtpoPromoImageWrapper(image);
+      if (!target || state.removedNodes.has(target) || isMamtpoProtectedNode(target) || !isMamtpoSafePromoImageWrapper(target)) {
         continue;
       }
-      removeNode(center, "mamtpo-center-affiliate-stack", {
+      removeNode(target, "mamtpo-home-promo-image", {
         action: "block",
         pageType: state.pageType,
-        node: describeNode(center),
-        externalImageLinks: countMamtpoExternalImageLinks(center)
+        node: describeNode(target),
+        src: image.getAttribute("src") || ""
       });
       removed += 1;
     }
     if (removed > 0) {
-      addPerfDelta({ centerAffiliateBlockRemoved: removed });
-      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo center affiliate stack removed", {
+      addPerfDelta({ homePromoImageRemoved: removed, adWrapperRemoved: removed });
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo home promo image removed", {
         action: "block",
         pageType: state.pageType,
         count: removed
@@ -892,17 +923,92 @@
     return removed;
   }
 
-  function isMamtpoCenterAffiliateStack(node) {
+  function closestMamtpoPromoImageWrapper(image) {
+    let current = image instanceof HTMLElement ? image : null;
+    let depth = 0;
+    while (current && current !== document.body && depth < 4) {
+      if (/^(center|p|div|section|aside|a)$/i.test(current.tagName)) {
+        return current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return image;
+  }
+
+  function isMamtpoSafePromoImageWrapper(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (node.querySelector("article, .post, .post-card, .post-item, h1, h2, h3, #main-player")) {
+      return false;
+    }
+    const imageCount = node.querySelectorAll("img").length;
+    const text = trimText(node.textContent);
+    return imageCount <= 4 && text.length <= 200;
+  }
+
+  function removeMamtpoCenterAffiliateBlocks(scope) {
+    const centers = Array.from(document.querySelectorAll("article center, .entry-header center, .entry-content center, main center, center"));
+    let removed = 0;
+    for (const center of centers) {
+      if (!(center instanceof HTMLElement) || !center.isConnected || state.removedNodes.has(center) || isMamtpoProtectedNode(center)) {
+        continue;
+      }
+      if (!isMamtpoCenterAffiliateStack(center, scope)) {
+        continue;
+      }
+      if (scope === "home" && !isMamtpoHomeAdCenter(center)) {
+        continue;
+      }
+      if (scope !== "home" && !isMamtpoNearPlayerArea(center)) {
+        continue;
+      }
+      removeNode(center, "mamtpo-center-affiliate-stack", {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(center),
+        scope,
+        externalImageLinks: countMamtpoExternalImageLinks(center)
+      });
+      const reinsertionKey = mamtpoReinsertionKey(center);
+      if (reinsertionKey) {
+        if (state.mamtpoRemovedKeys.has(reinsertionKey)) {
+          addPerfDelta({ overlayReremoved: 1 });
+        }
+        state.mamtpoRemovedKeys.add(reinsertionKey);
+      }
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta(scope === "home"
+        ? { homeCenterAffiliateBlockRemoved: removed, adWrapperRemoved: removed }
+        : { centerAffiliateBlockRemoved: removed, watchCenterAffiliateBlockRemoved: removed, adWrapperRemoved: removed });
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo center affiliate stack removed", {
+        action: "block",
+        pageType: state.pageType,
+        scope,
+        count: removed
+      });
+    }
+    return removed;
+  }
+
+  function isMamtpoCenterAffiliateStack(node, scope) {
     if (!(node instanceof HTMLElement) || node.querySelector("#main-player, iframe[src*='mee18player.com/play/' i]")) {
       return false;
     }
     if (node.querySelector("h1, h2, h3, time, iframe[src*='mee18player.com/play/' i], video, canvas")) {
       return false;
     }
+    if (scope === "home" && node.closest("article, .post, .post-card, .post-item, .entry, .loop, .grid-item")) {
+      return false;
+    }
     const imageCount = node.querySelectorAll("img").length;
     const externalImageLinks = countMamtpoExternalImageLinks(node);
+    const knownAffiliateLinks = countMamtpoKnownAffiliateImageLinks(node);
     const text = trimText(node.textContent);
-    return imageCount > 0 && externalImageLinks > 0 && text.length <= 300;
+    return imageCount > 0 && text.length <= 500 && (knownAffiliateLinks > 0 || externalImageLinks >= 2);
   }
 
   function countMamtpoExternalImageLinks(node) {
@@ -913,6 +1019,26 @@
       }
     }
     return count;
+  }
+
+  function countMamtpoKnownAffiliateImageLinks(node) {
+    let count = 0;
+    for (const anchor of node.querySelectorAll("a[href]")) {
+      if (anchor.querySelector("img") && isMamtpoKnownAffiliateUrl(anchor.getAttribute("href") || "")) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  function isMamtpoHomeAdCenter(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (node.querySelector("article, .post, .post-card, .post-item, h1, h2, h3")) {
+      return false;
+    }
+    return countMamtpoKnownAffiliateImageLinks(node) > 0 || countMamtpoExternalImageLinks(node) >= 2;
   }
 
   function isMamtpoNearPlayerArea(node) {
@@ -1055,8 +1181,25 @@
   }
 
   function isMamtpoAffiliateUrl(url) {
-    const host = heuristics.getUrlHostname(url, location.href);
-    return host === "t.ly" || host.endsWith(".t.ly") || host === "ibit.ly" || host.endsWith(".ibit.ly");
+    return isMamtpoKnownAffiliateUrl(url);
+  }
+
+  function isMamtpoKnownAffiliateUrl(url) {
+    const host = heuristics.getUrlHostname(url, location.href).toLowerCase();
+    if (!host) {
+      return false;
+    }
+    return [
+      "t.ly",
+      "ibit.ly",
+      "cutt.ly",
+      "cutly.cloud",
+      "rebrand.ly",
+      "ccx1.net",
+      "maryelschool.org",
+      "momentcar.com",
+      "bad-ems.info"
+    ].some((domain) => host === domain || host.endsWith("." + domain));
   }
 
   function isMamtpoExternalUrl(url) {
@@ -2718,7 +2861,12 @@
         centerAffiliateBlockRemoved: 0,
         adsContainerMainRemoved: 0,
         sideSkyscraperRemoved: 0,
-        overlayReremoved: 0
+        overlayReremoved: 0,
+        watchCenterAffiliateBlockRemoved: 0,
+        homePopupRemoved: 0,
+        homeCenterAffiliateBlockRemoved: 0,
+        homePromoImageRemoved: 0,
+        adWrapperRemoved: 0
       };
       if (Object.values(delta).some((value) => Number(value || 0) > 0)) {
         chrome.runtime.sendMessage({ type: "recordPerf", profileId: state.profile.id, delta });
