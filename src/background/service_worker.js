@@ -47,6 +47,12 @@ const perfCounters = {
   brokenIframeRemoved: 0,
   orphanAdUiRemoved: 0,
   orphanXRemoved: 0,
+  blockedAdBootstrapScripts: 0,
+  blockedFirstPartyAdLoader: 0,
+  fixedPopupIframeRemoved: 0,
+  adContainerRemoved: 0,
+  readerInjectedAdBlockRemoved: 0,
+  hiddenOnlyFallbackCount: 0,
   rearmedHijackAttemptsBlocked: 0,
   expensiveScansSkipped: 0
 };
@@ -941,6 +947,12 @@ function mergePerfCounters(delta) {
     "brokenIframeRemoved",
     "orphanAdUiRemoved",
     "orphanXRemoved",
+    "blockedAdBootstrapScripts",
+    "blockedFirstPartyAdLoader",
+    "fixedPopupIframeRemoved",
+    "adContainerRemoved",
+    "readerInjectedAdBlockRemoved",
+    "hiddenOnlyFallbackCount",
     "rearmedHijackAttemptsBlocked",
     "expensiveScansSkipped"
   ]) {

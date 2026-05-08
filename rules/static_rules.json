@@ -149,5 +149,61 @@
         "other"
       ]
     }
+  },
+  {
+    "id": 6,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://(yougetwhatyoupayfor\\.net/(popup/popup-v4\\.js|6b19cf019d81\\.js)|cdnpf\\.com/6976e0119fd94812e8e10262\\.js|acscdn\\.com/script/(banner\\.js|suv5\\.js)|clammyendearedkeg\\.com/bn\\.js|nn\\.coolishrocked\\.com/tnGqcEziwRRAkNS/126819)(\\?|$)",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://(www\\.)?mangakakalot\\.gg/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355\\.js(\\?|$)",
+      "resourceTypes": [
+        "script"
+      ]
+    }
+  },
+  {
+    "id": 8,
+    "priority": 8,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "requestDomains": [
+        "sync.adkernel.com",
+        "cpm.pressize.com"
+      ],
+      "resourceTypes": [
+        "sub_frame",
+        "xmlhttprequest",
+        "other"
+      ]
+    }
   }
 ]

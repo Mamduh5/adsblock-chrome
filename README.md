@@ -126,6 +126,16 @@ Confirmed exact Mangakakalot popup family handling:
 
 `oherbuttheds.com` and `xml.oherbuttheds.com` are now hard blocked in the Mangakakalot profile and static DNR rules.
 
+Confirmed chapter ad bootstrap blocking now happens before most DOM cleanup:
+
+- static DNR blocks `yougetwhatyoupayfor.net/popup/popup-v4.js`, `yougetwhatyoupayfor.net/6b19cf019d81.js`, `cdnpf.com/6976e0119fd94812e8e10262.js`, `acscdn.com/script/banner.js`, `acscdn.com/script/suv5.js`, `clammyendearedkeg.com/bn.js`, and `nn.coolishrocked.com/tnGqcEziwRRAkNS/126819`
+- static DNR blocks the exact first-party loader `/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js`
+- static DNR blocks sync/user-sync iframe traffic to `sync.adkernel.com` and `cpm.pressize.com`
+- content cleanup removes matching script tags if they are inserted anyway
+- stable chapter ad containers such as `._0f84a320`, `.ads-contain`, `.banner-cus`, `.banner-v2`, `.banner-container`, and `.ads-banner` are removed, not merely hidden
+- reader-injected script/iframe/max-height banner blocks inside `.container-chapter-reader` are removed while preserving manga images
+- fixed centered popup iframes with `sandbox` containing `allow-popups`, `top/left: 50%`, translate centering, and `z-index >= 2147483647` are removed with their overlay
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.

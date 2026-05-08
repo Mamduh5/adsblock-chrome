@@ -310,6 +310,10 @@
       + " exact popups, "
       + String(perf.fullscreenOverlayRemoved || 0)
       + " exact overlays, "
+      + String(perf.blockedAdBootstrapScripts || 0)
+      + " boot scripts, "
+      + String(perf.adContainerRemoved || 0)
+      + " ad containers, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)

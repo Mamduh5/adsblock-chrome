@@ -28,7 +28,10 @@
       2,
       3,
       4,
-      5
+      5,
+      6,
+      7,
+      8
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -62,7 +65,14 @@
       "sunwin28.bz",
       "hi88s.com",
       "oherbuttheds.com",
-      "xml.oherbuttheds.com"
+      "xml.oherbuttheds.com",
+      "yougetwhatyoupayfor.net",
+      "cdnpf.com",
+      "acscdn.com",
+      "clammyendearedkeg.com",
+      "nn.coolishrocked.com",
+      "sync.adkernel.com",
+      "cpm.pressize.com"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -193,7 +203,14 @@
           "sunwin28.bz",
           "hi88s.com",
           "oherbuttheds.com",
-          "xml.oherbuttheds.com"
+          "xml.oherbuttheds.com",
+          "yougetwhatyoupayfor.net",
+          "cdnpf.com",
+          "acscdn.com",
+          "clammyendearedkeg.com",
+          "nn.coolishrocked.com",
+          "sync.adkernel.com",
+          "cpm.pressize.com"
         ],
         hardHostKeywords: [
           "open88",
@@ -225,6 +242,13 @@
           "hi88s.com",
           "oherbuttheds.com",
           "xml.oherbuttheds.com",
+          "yougetwhatyoupayfor.net",
+          "cdnpf.com",
+          "acscdn.com",
+          "clammyendearedkeg.com",
+          "nn.coolishrocked.com",
+          "sync.adkernel.com",
+          "cpm.pressize.com",
           "open88",
           "fun88"
         ],
@@ -339,6 +363,32 @@
         brokenIframeSelectors: [
           "iframe[src^='undefined/iframe' i]",
           "iframe[src*='pbjs=1' i][src*='pid=undefined' i]"
+        ],
+        adBootstrapScriptUrls: [
+          "https://yougetwhatyoupayfor.net/popup/popup-v4.js",
+          "https://yougetwhatyoupayfor.net/6b19cf019d81.js",
+          "https://cdnpf.com/6976e0119fd94812e8e10262.js",
+          "https://acscdn.com/script/banner.js",
+          "https://acscdn.com/script/suv5.js",
+          "https://clammyendearedkeg.com/bn.js",
+          "https://nn.coolishrocked.com/tnGqcEziwRRAkNS/126819"
+        ],
+        firstPartyAdScriptPaths: [
+          "/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js"
+        ],
+        adContainerSelectors: [
+          "._0f84a320",
+          ".ads-contain",
+          ".banner-cus",
+          ".banner-v2",
+          ".banner-container",
+          ".ads-banner"
+        ],
+        readerInjectedAdSelectors: [
+          ".container-chapter-reader script[src]",
+          ".container-chapter-reader iframe",
+          ".container-chapter-reader div[style*='max-height:90px' i]",
+          ".container-chapter-reader div[style*='max-height: 90px' i]"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",

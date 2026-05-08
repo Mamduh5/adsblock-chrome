@@ -50,6 +50,12 @@
       brokenIframeRemoved: 0,
       orphanAdUiRemoved: 0,
       orphanXRemoved: 0,
+      blockedAdBootstrapScripts: 0,
+      blockedFirstPartyAdLoader: 0,
+      fixedPopupIframeRemoved: 0,
+      adContainerRemoved: 0,
+      readerInjectedAdBlockRemoved: 0,
+      hiddenOnlyFallbackCount: 0,
       rearmedHijackAttemptsBlocked: 0,
       expensiveScansSkipped: 0
     },
@@ -320,6 +326,13 @@
       "a.image_block",
       "img.kjalsgsdd",
       ".cbtoa",
+      "._0f84a320",
+      ".ads-contain",
+      ".banner-cus",
+      ".banner-v2",
+      ".banner-container",
+      ".ads-banner",
+      "script[src]",
       "iframe[src^='undefined/iframe' i]",
       "iframe[src*='pid=undefined' i]",
       "[style*='linear-gradient' i]",
@@ -375,11 +388,16 @@
     }
 
     let removed = 0;
+    if (state.pageType === "chapter") {
+      removed += removeKnownChapterAdScripts(roots);
+      removed += removeExactChapterPopupFamily(roots);
+      removed += removeStableChapterAdContainers(roots);
+      removed += removeReaderInjectedAdBlocks(roots);
+    }
     removed += removeBySelectors(roots);
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
     if (state.pageType === "chapter") {
-      removed += removeExactChapterPopupFamily(roots);
       removed += removeChapterPopupLayers(roots);
       removed += removeChapterJunk(roots);
       removed += neutralizeChapterClickTraps(roots);
@@ -478,12 +496,146 @@
     return isOverlayStyle(node, style) || heuristics.textLooksLikeTrap(state.profile, text);
   }
 
+  function removeKnownChapterAdScripts(roots) {
+    const scripts = queryWithinRoots(roots, "script[src]", 60);
+    let removed = 0;
+    let firstParty = 0;
+    for (const script of scripts) {
+      if (!(script instanceof HTMLScriptElement) || state.removedNodes.has(script)) {
+        continue;
+      }
+      const src = script.getAttribute("src") || "";
+      const reason = knownChapterAdScriptReason(src);
+      if (!reason) {
+        continue;
+      }
+      removeNode(script, "chapter-ad-bootstrap-script", {
+        action: "block",
+        pageType: state.pageType,
+        src,
+        reason
+      });
+      removed += 1;
+      firstParty += reason === "first_party_ad_loader" ? 1 : 0;
+    }
+    if (removed > 0) {
+      addPerfDelta({
+        blockedAdBootstrapScripts: removed - firstParty,
+        blockedFirstPartyAdLoader: firstParty
+      });
+    }
+    return removed;
+  }
+
+  function knownChapterAdScriptReason(src) {
+    let parsed;
+    try {
+      parsed = new URL(String(src || ""), location.href);
+    } catch (error) {
+      return "";
+    }
+    for (const exactUrl of state.pageRules.adBootstrapScriptUrls || []) {
+      try {
+        const expected = new URL(exactUrl);
+        if (parsed.hostname === expected.hostname && parsed.pathname === expected.pathname) {
+          return "third_party_ad_bootstrap";
+        }
+      } catch (error) {
+        debugLog("invalid-ad-script-url", { exactUrl });
+      }
+    }
+    if (profiles.profileMatchesHostname(state.profile, parsed.hostname)) {
+      for (const path of state.pageRules.firstPartyAdScriptPaths || []) {
+        if (parsed.pathname === path) {
+          return "first_party_ad_loader";
+        }
+      }
+    }
+    return "";
+  }
+
+  function removeStableChapterAdContainers(roots) {
+    const selector = heuristics.safeSelectorList(state.pageRules.adContainerSelectors || []).join(",");
+    if (!selector) {
+      return 0;
+    }
+    let removed = 0;
+    for (const node of queryWithinRoots(roots, selector, 80)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || isProtectedChapterNode(node) || isReaderRoot(node)) {
+        continue;
+      }
+      removeNode(node, "chapter-stable-ad-container", {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(node),
+        text: trimText(node.textContent)
+      });
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta({ adContainerRemoved: removed });
+    }
+    return removed;
+  }
+
+  function removeReaderInjectedAdBlocks(roots) {
+    const selector = heuristics.safeSelectorList(state.pageRules.readerInjectedAdSelectors || []).join(",");
+    if (!selector) {
+      return 0;
+    }
+    let removed = 0;
+    for (const node of queryWithinRoots(roots, selector, 80)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || !isInsideChapterReader(node) || isProtectedChapterNode(node)) {
+        continue;
+      }
+      const target = readerInjectedAdRemovalTarget(node);
+      if (!target || state.removedNodes.has(target) || isReaderRoot(target) || isProtectedChapterNode(target)) {
+        continue;
+      }
+      removeNode(target, "chapter-reader-injected-ad", {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(target),
+        trigger: describeNode(node)
+      });
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta({ readerInjectedAdBlockRemoved: removed });
+    }
+    return removed;
+  }
+
+  function readerInjectedAdRemovalTarget(node) {
+    if (node.tagName === "SCRIPT" || node.tagName === "IFRAME") {
+      const parent = node.parentElement;
+      if (parent instanceof HTMLElement && parent !== document.body && !parent.querySelector("img, picture") && parent.textContent.length <= 300) {
+        return parent;
+      }
+      return node;
+    }
+    return node;
+  }
+
+  function isReaderRoot(node) {
+    for (const selector of state.pageRules.readerSelectors || []) {
+      try {
+        if (node.matches(selector)) {
+          return true;
+        }
+      } catch (error) {
+        debugLog("invalid-reader-selector", { selector });
+      }
+    }
+    return false;
+  }
+
   function removeSuspiciousIframes(roots) {
     let removed = 0;
     for (const frame of queryWithinRoots(roots, "iframe", MAX_NODES_PER_PASS)) {
       const src = frame.getAttribute("src") || "";
       if (state.pageType === "chapter" && isBrokenChapterIframe(frame)) {
-        hideNode(frame, "chapter-broken-iframe", {
+        removeNode(frame, "chapter-broken-iframe", {
           action: "block",
           pageType: state.pageType,
           src,
@@ -491,6 +643,20 @@
         });
         removed += 1;
         addPerfDelta({ brokenIframeRemoved: 1 });
+        continue;
+      }
+      if (state.pageType === "chapter" && isFixedCenteredPopupIframe(frame)) {
+        const target = fixedPopupIframeRemovalTarget(frame);
+        removeNode(target, "chapter-fixed-popup-iframe", {
+          action: "block",
+          pageType: state.pageType,
+          src,
+          node: describeNode(target),
+          iframe: describeNode(frame)
+        });
+        removed += 1;
+        addPerfDelta({ fixedPopupIframeRemoved: 1 });
+        removed += removeExactFullscreenOverlays([document.documentElement], frame);
         continue;
       }
       if (state.inspectionMode && isCandidateUrl(src)) {
@@ -507,6 +673,44 @@
       }
     }
     return removed;
+  }
+
+  function isFixedCenteredPopupIframe(frame) {
+    const sandbox = frame.getAttribute("sandbox") || "";
+    if (!/\ballow-popups\b/i.test(sandbox)) {
+      return false;
+    }
+    const style = getComputedStyle(frame);
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    return style.position === "fixed"
+      && nearCssPercent(frame.style.top || style.top, 50)
+      && nearCssPercent(frame.style.left || style.left, 50)
+      && /translate\(\s*-50%\s*,\s*-50%\s*\)/i.test(style.transform || frame.getAttribute("style") || "")
+      && Number.isFinite(zIndex)
+      && zIndex >= 2147483647;
+  }
+
+  function nearCssPercent(value, expected) {
+    return Math.abs(Number.parseFloat(String(value || "")) - expected) <= 1 && String(value || "").includes("%");
+  }
+
+  function fixedPopupIframeRemovalTarget(frame) {
+    let current = frame;
+    let best = frame;
+    let depth = 0;
+    while (current instanceof HTMLElement && current !== document.body && depth < 3) {
+      if (isProtectedChapterNode(current) || isReaderRoot(current)) {
+        return best;
+      }
+      const style = getComputedStyle(current);
+      const zIndex = Number.parseInt(style.zIndex, 10);
+      if ((style.position === "fixed" || style.position === "absolute" || style.position === "relative") && Number.isFinite(zIndex) && zIndex >= 1000) {
+        best = current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return best;
   }
 
   function isBrokenChapterIframe(frame) {
@@ -650,7 +854,7 @@
           continue;
         }
         const target = findExactImageBlockContainer(anchor);
-        hideNode(target, "exact-image-block-popup", exactPopupDetails(target, anchor, "image_block"));
+        removeNode(target, "exact-image-block-popup", exactPopupDetails(target, anchor, "image_block"));
         removed += 1;
         imageBlockRemoved += 1;
         xmlBlocked += 1;
@@ -670,7 +874,7 @@
     if (iframeSelector) {
       for (const frame of queryWithinRoots(scanRoots, iframeSelector, 20)) {
         if (frame instanceof HTMLIFrameElement && !state.removedNodes.has(frame) && isBrokenChapterIframe(frame)) {
-          hideNode(frame, "exact-broken-iframe", {
+          removeNode(frame, "exact-broken-iframe", {
             action: "block",
             pageType: state.pageType,
             src: frame.getAttribute("src") || "",
@@ -754,7 +958,7 @@
       if (!isExactFullscreenClickCatcher(node)) {
         continue;
       }
-      hideNode(node, "exact-fullscreen-click-catcher", exactPopupDetails(node, triggerNode || node, "fullscreen_overlay"));
+      removeNode(node, "exact-fullscreen-click-catcher", exactPopupDetails(node, triggerNode || node, "fullscreen_overlay"));
       removed += 1;
     }
     return removed;
@@ -786,7 +990,7 @@
       if (!shouldRemoveOrphanJunkNode(node)) {
         continue;
       }
-      hideNode(node, "exact-popup-orphan-ui", orphanDetails(node, "exact", "image_block"));
+      removeNode(node, "exact-popup-orphan-ui", orphanDetails(node, "exact", "image_block"));
       removed += 1;
     }
     return removed;
@@ -1733,6 +1937,28 @@
       ...(extraDetails || {})
     });
     debugLog("node-hidden", { reason, node: describeNode(node) });
+  }
+
+  function removeNode(node, reason, extraDetails) {
+    if (!(node instanceof Element) || state.removedNodes.has(node)) {
+      return;
+    }
+    state.removedNodes.add(node);
+    recordEvent(config.EVENT_CATEGORIES.DOM, "DOM node removed", {
+      action: "block",
+      reason,
+      pageType: state.pageType,
+      node: describeNode(node),
+      ...(extraDetails || {})
+    });
+    debugLog("node-removed", { reason, node: describeNode(node) });
+    if (node.parentNode) {
+      node.remove();
+      return;
+    }
+    addPerfDelta({ hiddenOnlyFallbackCount: 1 });
+    node.setAttribute("data-site-shield-hidden", "true");
+    node.setAttribute("aria-hidden", "true");
   }
 
   function tryScrubStorage(label) {
