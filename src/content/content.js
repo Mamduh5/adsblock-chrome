@@ -56,6 +56,12 @@
       adContainerRemoved: 0,
       readerInjectedAdBlockRemoved: 0,
       hiddenOnlyFallbackCount: 0,
+      floaterRequestBlocked: 0,
+      centeredPopupIframeRemoved: 0,
+      popupSiblingFixedDivRemoved: 0,
+      remainingBudgetKeysCleared: 0,
+      undefinedIframeRemoved: 0,
+      admavenOrClckLoaderBlocked: 0,
       rearmedHijackAttemptsBlocked: 0,
       expensiveScansSkipped: 0
     },
@@ -391,6 +397,7 @@
     if (state.pageType === "chapter") {
       removed += removeKnownChapterAdScripts(roots);
       removed += removeExactChapterPopupFamily(roots);
+      removed += removeFixedPopupSiblingDivs(null);
       removed += removeStableChapterAdContainers(roots);
       removed += removeReaderInjectedAdBlocks(roots);
     }
@@ -500,6 +507,7 @@
     const scripts = queryWithinRoots(roots, "script[src]", 60);
     let removed = 0;
     let firstParty = 0;
+    let admavenOrClck = 0;
     for (const script of scripts) {
       if (!(script instanceof HTMLScriptElement) || state.removedNodes.has(script)) {
         continue;
@@ -517,11 +525,13 @@
       });
       removed += 1;
       firstParty += reason === "first_party_ad_loader" ? 1 : 0;
+      admavenOrClck += /\/js\/ads\/(admaven|clck-adu-kklgg)\.js/i.test(src) ? 1 : 0;
     }
     if (removed > 0) {
       addPerfDelta({
         blockedAdBootstrapScripts: removed - firstParty,
-        blockedFirstPartyAdLoader: firstParty
+        blockedFirstPartyAdLoader: firstParty,
+        admavenOrClckLoaderBlocked: admavenOrClck
       });
     }
     return removed;
@@ -537,7 +547,8 @@
     for (const exactUrl of state.pageRules.adBootstrapScriptUrls || []) {
       try {
         const expected = new URL(exactUrl);
-        if (parsed.hostname === expected.hostname && parsed.pathname === expected.pathname) {
+        const prefixPath = expected.pathname === "/get/2090108";
+        if (parsed.hostname === expected.hostname && (parsed.pathname === expected.pathname || prefixPath && parsed.pathname.startsWith(expected.pathname))) {
           return "third_party_ad_bootstrap";
         }
       } catch (error) {
@@ -642,7 +653,7 @@
           node: describeNode(frame)
         });
         removed += 1;
-        addPerfDelta({ brokenIframeRemoved: 1 });
+        addPerfDelta({ brokenIframeRemoved: 1, undefinedIframeRemoved: 1 });
         continue;
       }
       if (state.pageType === "chapter" && isFixedCenteredPopupIframe(frame)) {
@@ -655,7 +666,8 @@
           iframe: describeNode(frame)
         });
         removed += 1;
-        addPerfDelta({ fixedPopupIframeRemoved: 1 });
+        addPerfDelta({ fixedPopupIframeRemoved: 1, centeredPopupIframeRemoved: 1 });
+        removed += removeFixedPopupSiblingDivs(target);
         removed += removeExactFullscreenOverlays([document.documentElement], frame);
         continue;
       }
@@ -682,12 +694,18 @@
     }
     const style = getComputedStyle(frame);
     const zIndex = Number.parseInt(style.zIndex, 10);
+    const rect = frame.getBoundingClientRect();
+    const inline = frame.getAttribute("style") || "";
     return style.position === "fixed"
       && nearCssPercent(frame.style.top || style.top, 50)
       && nearCssPercent(frame.style.left || style.left, 50)
-      && /translate\(\s*-50%\s*,\s*-50%\s*\)/i.test(style.transform || frame.getAttribute("style") || "")
+      && /translate\(\s*-50%\s*,\s*-50%\s*\)/i.test(inline + " " + (style.transform || ""))
       && Number.isFinite(zIndex)
-      && zIndex >= 2147483647;
+      && zIndex >= 2147483647
+      && rect.width >= 180
+      && rect.width <= window.innerWidth
+      && rect.height >= 80
+      && rect.height <= window.innerHeight * 0.8;
   }
 
   function nearCssPercent(value, expected) {
@@ -713,9 +731,49 @@
     return best;
   }
 
+  function removeFixedPopupSiblingDivs(anchorNode) {
+    const roots = uniqueElements([anchorNode && anchorNode.parentElement, document.documentElement].filter(Boolean));
+    let removed = 0;
+    for (const node of queryWithinRoots(roots, "div[style*='2147483647'], div[style*='position: fixed' i], div[style*='position:fixed' i]", 50)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || anchorNode && node.contains(anchorNode) || isProtectedChapterNode(node)) {
+        continue;
+      }
+      if (!isPopupSiblingFixedDiv(node)) {
+        continue;
+      }
+      removeNode(node, "chapter-popup-sibling-fixed-div", {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(node),
+        rect: rectSummary(node.getBoundingClientRect())
+      });
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta({ popupSiblingFixedDivRemoved: removed });
+    }
+    return removed;
+  }
+
+  function isPopupSiblingFixedDiv(node) {
+    const style = getComputedStyle(node);
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    if (style.position !== "fixed" || !Number.isFinite(zIndex) || zIndex < 2147483647) {
+      return false;
+    }
+    if (node.querySelector("img, picture, canvas, video, select, form, textarea")) {
+      return false;
+    }
+    const text = trimText(node.textContent);
+    const rect = node.getBoundingClientRect();
+    const smallFragment = rect.width <= 100 && rect.height <= 70;
+    const popupWrapper = rect.width >= 160 && rect.width <= window.innerWidth && rect.height >= 80 && rect.height <= window.innerHeight * 0.8;
+    return text.length <= 30 && (smallFragment || popupWrapper);
+  }
+
   function isBrokenChapterIframe(frame) {
     const src = String(frame.getAttribute("src") || "");
-    if (!/^undefined\/iframe/i.test(src) && !(src.includes("pbjs=1") && src.includes("pid=undefined"))) {
+    if (!/^undefined\/iframe/i.test(src) && !/^\/\/undefined\//i.test(src) && !src.includes("undefined/iframe") && !(src.includes("pbjs=1") && src.includes("pid=undefined"))) {
       return false;
     }
     const style = getComputedStyle(frame);
@@ -1995,7 +2053,8 @@
         continue;
       }
 
-      if (!heuristics.shouldScrubStorageKey(state.profile, key)) {
+      const exactBudgetKey = isRemainingBudgetKey(key);
+      if (!exactBudgetKey && !heuristics.shouldScrubStorageKey(state.profile, key)) {
         continue;
       }
 
@@ -2004,7 +2063,15 @@
       try {
         storageArea.removeItem(key);
         deleted += 1;
-        recordEvent(config.EVENT_CATEGORIES.STORAGE, "Storage key removed", { action: "block", area: label, key });
+        recordEvent(config.EVENT_CATEGORIES.STORAGE, "Storage key removed", {
+          action: "block",
+          area: label,
+          key,
+          reason: exactBudgetKey ? "remaining_popunder_budget" : "storage_heuristic"
+        });
+        if (exactBudgetKey) {
+          addPerfDelta({ remainingBudgetKeysCleared: 1 });
+        }
         debugLog("storage-key-deleted", { label, key });
       } catch (error) {
         debugLog("storage-delete-failed", { label, key, error: String(error) });
@@ -2014,6 +2081,10 @@
     if (deleted > 0) {
       incrementStats({ deletedStorageItems: deleted });
     }
+  }
+
+  function isRemainingBudgetKey(key) {
+    return (state.pageRules.remainingBudgetKeys || []).some((value) => String(value) === String(key));
   }
 
   function stopEvent(event) {

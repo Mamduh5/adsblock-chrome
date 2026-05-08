@@ -109,7 +109,9 @@ vm.runInContext(
   assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
   assert(profile.pageRules.chapter.hardBlockHosts.includes("xml.oherbuttheds.com"), "chapter rules should include exact popup host");
   assert(profile.hardBlockHosts.includes("yougetwhatyoupayfor.net"), "profile should hard-block confirmed ad bootstrap host");
-  assert(profile.staticRuleIds.includes(8), "profile should own new static DNR rules");
+  assert(profile.hardBlockHosts.includes("chubbyexemplaryhardiness.com"), "profile should hard-block remaining popunder host");
+  assert(profile.staticRuleIds.includes(9), "profile should own final popunder static DNR rules");
+  assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
   assert(profile.pageRules.chapter.clickAllowSelectors.length > 0, "chapter rules should include click allowlist");
@@ -124,8 +126,11 @@ vm.runInContext(
   assert(profile.pageRules.chapter.brokenIframeSelectors.some((selector) => selector.includes("undefined/iframe")), "chapter rules should include broken iframe selector");
   assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("popup-v4.js")), "chapter rules should include ad bootstrap script URLs");
   assert(profile.pageRules.chapter.firstPartyAdScriptPaths.includes("/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js"), "chapter rules should include exact first-party ad loader path");
+  assert(profile.pageRules.chapter.firstPartyAdScriptPaths.includes("/js/ads/clck-adu-kklgg.js"), "chapter rules should include exact clck loader path");
+  assert(profile.pageRules.chapter.firstPartyAdScriptPaths.includes("/js/ads/admaven.js"), "chapter rules should include exact admaven loader path");
   assert(profile.pageRules.chapter.adContainerSelectors.includes("._0f84a320"), "chapter rules should include stable ad container class");
   assert(profile.pageRules.chapter.readerInjectedAdSelectors.some((selector) => selector.includes("max-height")), "chapter rules should include reader-injected ad block selectors");
+  assert(profile.pageRules.chapter.remainingBudgetKeys.includes("__PPU_ppucnt"), "chapter rules should include exact popunder storage budget keys");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");

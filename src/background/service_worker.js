@@ -53,6 +53,12 @@ const perfCounters = {
   adContainerRemoved: 0,
   readerInjectedAdBlockRemoved: 0,
   hiddenOnlyFallbackCount: 0,
+  floaterRequestBlocked: 0,
+  centeredPopupIframeRemoved: 0,
+  popupSiblingFixedDivRemoved: 0,
+  remainingBudgetKeysCleared: 0,
+  undefinedIframeRemoved: 0,
+  admavenOrClckLoaderBlocked: 0,
   rearmedHijackAttemptsBlocked: 0,
   expensiveScansSkipped: 0
 };
@@ -91,6 +97,11 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     }
 
     incrementStats(profile.id, { blockedRequests: 1 });
+    if (event.rule.ruleId === 9) {
+      mergePerfCounters({ floaterRequestBlocked: 1 });
+    } else if (event.rule.ruleId === 7) {
+      mergePerfCounters({ admavenOrClckLoaderBlocked: 1 });
+    }
     recordEvent(profile.id, config.EVENT_CATEGORIES.NETWORK, "Request blocked", {
       action: "block",
       source: "dnr",
@@ -603,7 +614,8 @@ async function scrubSuspiciousCookies(profile, reason) {
       continue;
     }
 
-    if (!heuristics.shouldScrubCookieName(profile, cookie.name)) {
+    const exactCookie = isExactCookieName(profile, cookie.name);
+    if (!exactCookie && !heuristics.shouldScrubCookieName(profile, cookie.name)) {
       continue;
     }
 
@@ -619,10 +631,14 @@ async function scrubSuspiciousCookies(profile, reason) {
     await recordEvent(profile.id, config.EVENT_CATEGORIES.COOKIE, "Cookie removed", {
       action: "block",
       reason,
+      scrubReason: exactCookie ? "remaining_popunder_budget" : "cookie_heuristic",
       name: cookie.name,
       domain: cookie.domain,
       path: cookie.path
     });
+    if (exactCookie) {
+      mergePerfCounters({ remainingBudgetKeysCleared: 1 });
+    }
   }
 
   if (deleted > 0) {
@@ -630,6 +646,10 @@ async function scrubSuspiciousCookies(profile, reason) {
   }
 
   return { checked: cookies.length, deleted };
+}
+
+function isExactCookieName(profile, cookieName) {
+  return (profile.exactCookieNames || []).some((name) => String(name) === String(cookieName));
 }
 
 async function getProfileCookies(profile) {
@@ -953,6 +973,12 @@ function mergePerfCounters(delta) {
     "adContainerRemoved",
     "readerInjectedAdBlockRemoved",
     "hiddenOnlyFallbackCount",
+    "floaterRequestBlocked",
+    "centeredPopupIframeRemoved",
+    "popupSiblingFixedDivRemoved",
+    "remainingBudgetKeysCleared",
+    "undefinedIframeRemoved",
+    "admavenOrClckLoaderBlocked",
     "rearmedHijackAttemptsBlocked",
     "expensiveScansSkipped"
   ]) {

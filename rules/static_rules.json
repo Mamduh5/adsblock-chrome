@@ -161,7 +161,7 @@
         "mangakakalot.gg",
         "www.mangakakalot.gg"
       ],
-      "regexFilter": "^https?://(yougetwhatyoupayfor\\.net/(popup/popup-v4\\.js|6b19cf019d81\\.js)|cdnpf\\.com/6976e0119fd94812e8e10262\\.js|acscdn\\.com/script/(banner\\.js|suv5\\.js)|clammyendearedkeg\\.com/bn\\.js|nn\\.coolishrocked\\.com/tnGqcEziwRRAkNS/126819)(\\?|$)",
+      "regexFilter": "^https?://(yougetwhatyoupayfor\\.net/(popup/popup-v4\\.js|6b19cf019d81\\.js|banners-web/mangakakalot\\.gg\\.js)|cdnpf\\.com/6976e0119fd94812e8e10262\\.js|acscdn\\.com/script/(banner\\.js|suv5\\.js)|clammyendearedkeg\\.com/bn\\.js|nn\\.coolishrocked\\.com/tnGqcEziwRRAkNS/126819|chubbyexemplaryhardiness\\.com/(on\\.js|get/2090108[^?#]*))([?#]|$)",
       "resourceTypes": [
         "script"
       ]
@@ -178,7 +178,7 @@
         "mangakakalot.gg",
         "www.mangakakalot.gg"
       ],
-      "regexFilter": "^https?://(www\\.)?mangakakalot\\.gg/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355\\.js(\\?|$)",
+      "regexFilter": "^https?://(www\\.)?mangakakalot\\.gg/js/ads/(fly_e2c6a9cb8f6900e4bea0b82766581355\\.js|clck-adu-kklgg\\.js|admaven\\.js)([?#]|$)",
       "resourceTypes": [
         "script"
       ]
@@ -202,6 +202,28 @@
       "resourceTypes": [
         "sub_frame",
         "xmlhttprequest",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 9,
+    "priority": 10,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://(oundhertobeconsist\\.org/floater|d3jzhqnvnvdy34\\.cloudfront\\.net/\\?qhzjd=1246039)([&#?]|$)",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "image",
         "other"
       ]
     }

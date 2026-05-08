@@ -129,12 +129,17 @@ Confirmed exact Mangakakalot popup family handling:
 Confirmed chapter ad bootstrap blocking now happens before most DOM cleanup:
 
 - static DNR blocks `yougetwhatyoupayfor.net/popup/popup-v4.js`, `yougetwhatyoupayfor.net/6b19cf019d81.js`, `cdnpf.com/6976e0119fd94812e8e10262.js`, `acscdn.com/script/banner.js`, `acscdn.com/script/suv5.js`, `clammyendearedkeg.com/bn.js`, and `nn.coolishrocked.com/tnGqcEziwRRAkNS/126819`
-- static DNR blocks the exact first-party loader `/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js`
+- static DNR also blocks `yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js`, `chubbyexemplaryhardiness.com/on.js`, `chubbyexemplaryhardiness.com/get/2090108`, `oundhertobeconsist.org/floater`, and the campaign URL `d3jzhqnvnvdy34.cloudfront.net/?qhzjd=1246039`
+- static DNR blocks exact first-party ad loaders `/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js`, `/js/ads/clck-adu-kklgg.js`, and `/js/ads/admaven.js`
 - static DNR blocks sync/user-sync iframe traffic to `sync.adkernel.com` and `cpm.pressize.com`
 - content cleanup removes matching script tags if they are inserted anyway
 - stable chapter ad containers such as `._0f84a320`, `.ads-contain`, `.banner-cus`, `.banner-v2`, `.banner-container`, and `.ads-banner` are removed, not merely hidden
 - reader-injected script/iframe/max-height banner blocks inside `.container-chapter-reader` are removed while preserving manga images
 - fixed centered popup iframes with `sandbox` containing `allow-popups`, `top/left: 50%`, translate centering, and `z-index >= 2147483647` are removed with their overlay
+
+The remaining two-click popunder budget is cleared by exact key, not by broad cookie/storage clearing. The profile removes these first-party storage/cookie names when present: `126819`, `PBFP250225`, `__PPU_SESSION_1_2090108`, `__PPU_puid`, `__PPU_ppucnt`, `__BI_SESSION_10144537`, `__BI_SESSION_10144538`, and `isAddHistory`. Google, YouTube, Cloudflare, and account/session cookies are not targeted by this exact cleanup.
+
+The final centered iframe family is removed by structure rather than URL: `sandbox` must contain `allow-popups`, `position` must be fixed, `top/left` must be `50%`, transform must include `translate(-50%, -50%)`, z-index must be at least `2147483647`, and dimensions must be popup-like. Nearby fixed high-z empty div fragments are also removed when they match small or popup-wrapper geometry.
 
 ## Runtime Model
 

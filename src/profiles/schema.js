@@ -23,6 +23,7 @@
     candidateStorageKeyTerms: [],
     suspiciousCookieKeyTerms: [],
     candidateCookieKeyTerms: [],
+    exactCookieNames: [],
     protectedCookieTerms: [],
     pageTypes: {},
     pageRules: {},
@@ -89,6 +90,7 @@
     merged.candidateStorageKeyTerms = normalizeList(merged.candidateStorageKeyTerms);
     merged.suspiciousCookieKeyTerms = normalizeList(merged.suspiciousCookieKeyTerms);
     merged.candidateCookieKeyTerms = normalizeList(merged.candidateCookieKeyTerms);
+    merged.exactCookieNames = normalizeList(merged.exactCookieNames);
     merged.protectedCookieTerms = normalizeList(merged.protectedCookieTerms);
     merged.pageTypes = normalizePageTypes(merged.pageTypes);
     merged.pageRules = normalizePageRules(merged.pageRules);
@@ -128,6 +130,7 @@
         firstPartyAdScriptPaths: normalizeList(rules && rules.firstPartyAdScriptPaths || []),
         adContainerSelectors: normalizeList(rules && rules.adContainerSelectors || []),
         readerInjectedAdSelectors: normalizeList(rules && rules.readerInjectedAdSelectors || []),
+        remainingBudgetKeys: normalizeList(rules && rules.remainingBudgetKeys || []),
         popupPromoTextTerms: normalizeList(rules && rules.popupPromoTextTerms || []),
         removalContainerSelectors: normalizeList(rules && rules.removalContainerSelectors || []),
         maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80),

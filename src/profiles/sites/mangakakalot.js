@@ -31,7 +31,8 @@
       5,
       6,
       7,
-      8
+      8,
+      9
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -72,7 +73,10 @@
       "clammyendearedkeg.com",
       "nn.coolishrocked.com",
       "sync.adkernel.com",
-      "cpm.pressize.com"
+      "cpm.pressize.com",
+      "oundhertobeconsist.org",
+      "chubbyexemplaryhardiness.com",
+      "d3jzhqnvnvdy34.cloudfront.net"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -171,6 +175,16 @@
       "utm",
       "zone"
     ],
+    exactCookieNames: [
+      "126819",
+      "PBFP250225",
+      "__PPU_SESSION_1_2090108",
+      "__PPU_puid",
+      "__PPU_ppucnt",
+      "__BI_SESSION_10144537",
+      "__BI_SESSION_10144538",
+      "isAddHistory"
+    ],
     protectedCookieTerms: [
       "auth",
       "csrf",
@@ -210,7 +224,10 @@
           "clammyendearedkeg.com",
           "nn.coolishrocked.com",
           "sync.adkernel.com",
-          "cpm.pressize.com"
+          "cpm.pressize.com",
+          "oundhertobeconsist.org",
+          "chubbyexemplaryhardiness.com",
+          "d3jzhqnvnvdy34.cloudfront.net"
         ],
         hardHostKeywords: [
           "open88",
@@ -249,6 +266,9 @@
           "nn.coolishrocked.com",
           "sync.adkernel.com",
           "cpm.pressize.com",
+          "oundhertobeconsist.org",
+          "chubbyexemplaryhardiness.com",
+          "d3jzhqnvnvdy34.cloudfront.net",
           "open88",
           "fun88"
         ],
@@ -362,6 +382,7 @@
         ],
         brokenIframeSelectors: [
           "iframe[src^='undefined/iframe' i]",
+          "iframe[src^='//undefined/' i]",
           "iframe[src*='pbjs=1' i][src*='pid=undefined' i]"
         ],
         adBootstrapScriptUrls: [
@@ -371,10 +392,15 @@
           "https://acscdn.com/script/banner.js",
           "https://acscdn.com/script/suv5.js",
           "https://clammyendearedkeg.com/bn.js",
-          "https://nn.coolishrocked.com/tnGqcEziwRRAkNS/126819"
+          "https://nn.coolishrocked.com/tnGqcEziwRRAkNS/126819",
+          "https://yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js",
+          "https://chubbyexemplaryhardiness.com/on.js",
+          "https://chubbyexemplaryhardiness.com/get/2090108"
         ],
         firstPartyAdScriptPaths: [
-          "/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js"
+          "/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js",
+          "/js/ads/clck-adu-kklgg.js",
+          "/js/ads/admaven.js"
         ],
         adContainerSelectors: [
           "._0f84a320",
@@ -389,6 +415,16 @@
           ".container-chapter-reader iframe",
           ".container-chapter-reader div[style*='max-height:90px' i]",
           ".container-chapter-reader div[style*='max-height: 90px' i]"
+        ],
+        remainingBudgetKeys: [
+          "126819",
+          "PBFP250225",
+          "__PPU_SESSION_1_2090108",
+          "__PPU_puid",
+          "__PPU_ppucnt",
+          "__BI_SESSION_10144537",
+          "__BI_SESSION_10144538",
+          "isAddHistory"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",

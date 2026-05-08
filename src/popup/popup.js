@@ -314,6 +314,10 @@
       + " boot scripts, "
       + String(perf.adContainerRemoved || 0)
       + " ad containers, "
+      + String(perf.centeredPopupIframeRemoved || 0)
+      + " centered iframes, "
+      + String(perf.remainingBudgetKeysCleared || 0)
+      + " budget keys, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)
