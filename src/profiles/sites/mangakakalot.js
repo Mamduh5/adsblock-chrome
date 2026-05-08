@@ -60,7 +60,9 @@
       "coolgamesunblocked.com",
       "crazygamesunblocked.net",
       "sunwin28.bz",
-      "hi88s.com"
+      "hi88s.com",
+      "oherbuttheds.com",
+      "xml.oherbuttheds.com"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -189,7 +191,9 @@
           "coolgamesunblocked.com",
           "crazygamesunblocked.net",
           "sunwin28.bz",
-          "hi88s.com"
+          "hi88s.com",
+          "oherbuttheds.com",
+          "xml.oherbuttheds.com"
         ],
         hardHostKeywords: [
           "open88",
@@ -203,6 +207,11 @@
           ".chapter-content a[href*='crazygamesunblocked.net' i]",
           ".chapter-content a[href*='sunwin28.bz' i]",
           ".chapter-content a[href*='hi88s.com' i]",
+          "a.image_block[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "a[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "img.kjalsgsdd[src*='xml.oherbuttheds.com/thumbnail' i]",
+          "iframe[src^='undefined/iframe' i]",
+          "iframe[src*='pid=undefined' i][src*='pbjs=1' i]",
           ".chapter-content a[href*='open88' i]",
           ".chapter-content a[href*='fun88' i]"
         ],
@@ -214,6 +223,8 @@
           "crazygamesunblocked.net",
           "sunwin28.bz",
           "hi88s.com",
+          "oherbuttheds.com",
+          "xml.oherbuttheds.com",
           "open88",
           "fun88"
         ],
@@ -289,6 +300,8 @@
           ".container-chapter-reader [class*='ad-label' i]",
           "[class*='content-notification' i]",
           "[id*='content-notification' i]",
+          "a.image_block[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "img.kjalsgsdd[src*='xml.oherbuttheds.com/thumbnail' i]",
           "[class*='notification' i] button",
           "[id*='notification' i] button"
         ],
@@ -299,6 +312,8 @@
           "content notification"
         ],
         popupLayerSelectors: [
+          "a.image_block[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "img.kjalsgsdd[src*='xml.oherbuttheds.com/thumbnail' i]",
           "[class*='content-notification' i]",
           "[id*='content-notification' i]",
           "[class*='notification' i]",
@@ -309,6 +324,21 @@
           "[style*='flex-direction: column' i]",
           "[style*='border-radius: 16px' i]",
           "[style*='border-radius:16px' i]"
+        ],
+        exactPopupSelectors: [
+          "a.image_block[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "a[target='_blank'][href*='xml.oherbuttheds.com/click' i]",
+          "img.kjalsgsdd[src*='xml.oherbuttheds.com/thumbnail' i]",
+          ".cbtoa"
+        ],
+        exactFullscreenOverlaySelectors: [
+          "[style*='2147483646']",
+          "[style*='position: fixed' i][style*='pointer-events: auto' i]",
+          "[style*='position:fixed' i][style*='pointer-events:auto' i]"
+        ],
+        brokenIframeSelectors: [
+          "iframe[src^='undefined/iframe' i]",
+          "iframe[src*='pbjs=1' i][src*='pid=undefined' i]"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",

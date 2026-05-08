@@ -107,6 +107,7 @@ vm.runInContext(
   assert(profile, "Mangakakalot profile should be registered");
   assert(profile.pageTypes.chapter, "Mangakakalot profile should define chapter page type");
   assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
+  assert(profile.pageRules.chapter.hardBlockHosts.includes("xml.oherbuttheds.com"), "chapter rules should include exact popup host");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
   assert(profile.pageRules.chapter.clickAllowSelectors.length > 0, "chapter rules should include click allowlist");
@@ -116,6 +117,9 @@ vm.runInContext(
   assert(profile.pageRules.chapter.popupBackdropSelectors.length > 0, "chapter rules should include popup backdrop selectors");
   assert(profile.pageRules.chapter.popupLayerSelectors.some((selector) => selector.includes("linear-gradient")), "chapter popup selectors should include promo-card style signature");
   assert(profile.pageRules.chapter.popupPromoTextTerms.includes("free spins"), "chapter popup rules should include gambling promo terms");
+  assert(profile.pageRules.chapter.exactPopupSelectors.some((selector) => selector.includes("image_block")), "chapter rules should include exact image_block popup selector");
+  assert(profile.pageRules.chapter.exactFullscreenOverlaySelectors.some((selector) => selector.includes("2147483646")), "chapter rules should include exact fullscreen overlay selector");
+  assert(profile.pageRules.chapter.brokenIframeSelectors.some((selector) => selector.includes("undefined/iframe")), "chapter rules should include broken iframe selector");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");

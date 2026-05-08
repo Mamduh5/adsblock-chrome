@@ -306,6 +306,10 @@
       + " popups removed, "
       + String(perf.popupBackdropsNeutralized || 0)
       + " backdrops removed, "
+      + String(perf.imageBlockPopupRemoved || 0)
+      + " exact popups, "
+      + String(perf.fullscreenOverlayRemoved || 0)
+      + " exact overlays, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)

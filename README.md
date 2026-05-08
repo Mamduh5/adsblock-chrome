@@ -116,6 +116,16 @@ The chapter profile has a dedicated popup-layer remover for `content notificatio
 
 The same remover also has a Mangakakalot promo-card signature for the gambling-style modal seen on chapter pages: dark gradient/flex-column/rounded-card style clues plus CTA text such as `free spins`, `no deposit`, `click here`, or `casino`. When that inner card matches, the content script climbs the nearby wrapper chain and also scans a bounded set of fixed/absolute backdrop candidates from the document root, so the card and its dimmer/click-catcher are removed together.
 
+Confirmed exact Mangakakalot popup family handling:
+
+- `a.image_block[target="_blank"][href*="xml.oherbuttheds.com/click"]`
+- `img.kjalsgsdd[src*="xml.oherbuttheds.com/thumbnail"]`
+- child close nodes such as `.cbtoa`
+- full-screen fixed click catchers with viewport-sized geometry, `z-index >= 2147483646`, `pointer-events: auto`, and dark semi-transparent background
+- hidden broken iframes such as `undefined/iframe?...pbjs=1...pid=undefined`
+
+`oherbuttheds.com` and `xml.oherbuttheds.com` are now hard blocked in the Mangakakalot profile and static DNR rules.
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.

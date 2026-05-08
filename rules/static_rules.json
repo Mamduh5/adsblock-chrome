@@ -33,7 +33,9 @@
         "coolgamesunblocked.com",
         "crazygamesunblocked.net",
         "sunwin28.bz",
-        "hi88s.com"
+        "hi88s.com",
+        "oherbuttheds.com",
+        "xml.oherbuttheds.com"
       ],
       "resourceTypes": [
         "font",
@@ -74,7 +76,9 @@
         "coolgamesunblocked.com",
         "crazygamesunblocked.net",
         "sunwin28.bz",
-        "hi88s.com"
+        "hi88s.com",
+        "oherbuttheds.com",
+        "xml.oherbuttheds.com"
       ],
       "resourceTypes": [
         "main_frame",
@@ -113,7 +117,7 @@
         "mangakakalot.gg",
         "www.mangakakalot.gg"
       ],
-      "regexFilter": "^https?://([^/]+\\.)?(seonetwork\\.net|abcya3\\.games|flax\\.to|coolgamesunblocked\\.com|crazygamesunblocked\\.net|sunwin28\\.bz|hi88s\\.com)(/|$)",
+      "regexFilter": "^https?://([^/]+\\.)?(seonetwork\\.net|abcya3\\.games|flax\\.to|coolgamesunblocked\\.com|crazygamesunblocked\\.net|sunwin28\\.bz|hi88s\\.com|oherbuttheds\\.com)(/|$)",
       "resourceTypes": [
         "main_frame",
         "sub_frame",

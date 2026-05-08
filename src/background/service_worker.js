@@ -41,6 +41,11 @@ const perfCounters = {
   popupLayersReremoved: 0,
   popupCardsMatched: 0,
   popupBackdropsNeutralized: 0,
+  imageBlockPopupRemoved: 0,
+  fullscreenOverlayRemoved: 0,
+  xmlOherbutthedsBlocked: 0,
+  brokenIframeRemoved: 0,
+  orphanAdUiRemoved: 0,
   orphanXRemoved: 0,
   rearmedHijackAttemptsBlocked: 0,
   expensiveScansSkipped: 0
@@ -930,6 +935,11 @@ function mergePerfCounters(delta) {
     "popupLayersReremoved",
     "popupCardsMatched",
     "popupBackdropsNeutralized",
+    "imageBlockPopupRemoved",
+    "fullscreenOverlayRemoved",
+    "xmlOherbutthedsBlocked",
+    "brokenIframeRemoved",
+    "orphanAdUiRemoved",
     "orphanXRemoved",
     "rearmedHijackAttemptsBlocked",
     "expensiveScansSkipped"

@@ -44,6 +44,11 @@
       popupLayersReremoved: 0,
       popupCardsMatched: 0,
       popupBackdropsNeutralized: 0,
+      imageBlockPopupRemoved: 0,
+      fullscreenOverlayRemoved: 0,
+      xmlOherbutthedsBlocked: 0,
+      brokenIframeRemoved: 0,
+      orphanAdUiRemoved: 0,
       orphanXRemoved: 0,
       rearmedHijackAttemptsBlocked: 0,
       expensiveScansSkipped: 0
@@ -312,6 +317,11 @@
       "[id*='notification' i]",
       "[class*='overlay' i]",
       "[id*='overlay' i]",
+      "a.image_block",
+      "img.kjalsgsdd",
+      ".cbtoa",
+      "iframe[src^='undefined/iframe' i]",
+      "iframe[src*='pid=undefined' i]",
       "[style*='linear-gradient' i]",
       "[style*='flex-direction: column' i]",
       "[style*='border-radius: 16px' i]",
@@ -369,6 +379,7 @@
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
     if (state.pageType === "chapter") {
+      removed += removeExactChapterPopupFamily(roots);
       removed += removeChapterPopupLayers(roots);
       removed += removeChapterJunk(roots);
       removed += neutralizeChapterClickTraps(roots);
@@ -471,6 +482,17 @@
     let removed = 0;
     for (const frame of queryWithinRoots(roots, "iframe", MAX_NODES_PER_PASS)) {
       const src = frame.getAttribute("src") || "";
+      if (state.pageType === "chapter" && isBrokenChapterIframe(frame)) {
+        hideNode(frame, "chapter-broken-iframe", {
+          action: "block",
+          pageType: state.pageType,
+          src,
+          node: describeNode(frame)
+        });
+        removed += 1;
+        addPerfDelta({ brokenIframeRemoved: 1 });
+        continue;
+      }
       if (state.inspectionMode && isCandidateUrl(src)) {
         recordEvent(config.EVENT_CATEGORIES.NETWORK, "Candidate iframe host observed", {
           action: "observe",
@@ -485,6 +507,16 @@
       }
     }
     return removed;
+  }
+
+  function isBrokenChapterIframe(frame) {
+    const src = String(frame.getAttribute("src") || "");
+    if (!/^undefined\/iframe/i.test(src) && !(src.includes("pbjs=1") && src.includes("pid=undefined"))) {
+      return false;
+    }
+    const style = getComputedStyle(frame);
+    const rect = frame.getBoundingClientRect();
+    return style.display === "none" || (rect.width <= 1 && rect.height <= 1) || /height\s*:\s*0px/i.test(frame.getAttribute("style") || "");
   }
 
   function observePageUrls(roots) {
@@ -594,6 +626,182 @@
       }
     }
     return results;
+  }
+
+  function removeExactChapterPopupFamily(roots) {
+    const rules = state.pageRules || {};
+    const scanRoots = uniqueElements(roots.concat([document.documentElement]));
+    const popupSelector = heuristics.safeSelectorList(rules.exactPopupSelectors || []).join(",");
+    const overlaySelector = heuristics.safeSelectorList(rules.exactFullscreenOverlaySelectors || []).join(",");
+    const iframeSelector = heuristics.safeSelectorList(rules.brokenIframeSelectors || []).join(",");
+    let removed = 0;
+    let imageBlockRemoved = 0;
+    let overlayRemoved = 0;
+    let xmlBlocked = 0;
+    let brokenIframeRemoved = 0;
+
+    if (popupSelector) {
+      for (const node of queryWithinRoots(scanRoots, popupSelector, 30)) {
+        if (!(node instanceof HTMLElement) || state.removedNodes.has(node)) {
+          continue;
+        }
+        const anchor = exactImageBlockAnchor(node);
+        if (!anchor || state.removedNodes.has(anchor)) {
+          continue;
+        }
+        const target = findExactImageBlockContainer(anchor);
+        hideNode(target, "exact-image-block-popup", exactPopupDetails(target, anchor, "image_block"));
+        removed += 1;
+        imageBlockRemoved += 1;
+        xmlBlocked += 1;
+        removed += removeExactPopupOrphans(target);
+        const backdrops = removeExactFullscreenOverlays(scanRoots, anchor);
+        removed += backdrops;
+        overlayRemoved += backdrops;
+      }
+    }
+
+    if (overlaySelector) {
+      const overlays = removeExactFullscreenOverlays(scanRoots, null);
+      removed += overlays;
+      overlayRemoved += overlays;
+    }
+
+    if (iframeSelector) {
+      for (const frame of queryWithinRoots(scanRoots, iframeSelector, 20)) {
+        if (frame instanceof HTMLIFrameElement && !state.removedNodes.has(frame) && isBrokenChapterIframe(frame)) {
+          hideNode(frame, "exact-broken-iframe", {
+            action: "block",
+            pageType: state.pageType,
+            src: frame.getAttribute("src") || "",
+            node: describeNode(frame)
+          });
+          removed += 1;
+          brokenIframeRemoved += 1;
+        }
+      }
+    }
+
+    if (removed > 0) {
+      addPerfDelta({
+        imageBlockPopupRemoved: imageBlockRemoved,
+        fullscreenOverlayRemoved: overlayRemoved,
+        xmlOherbutthedsBlocked: xmlBlocked,
+        brokenIframeRemoved,
+        orphanAdUiRemoved: Math.max(0, removed - imageBlockRemoved - overlayRemoved - brokenIframeRemoved)
+      });
+    }
+    return removed;
+  }
+
+  function exactImageBlockAnchor(node) {
+    const anchor = node instanceof HTMLAnchorElement ? node : node.closest && node.closest("a.image_block[href]");
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return null;
+    }
+    const href = anchor.getAttribute("href") || "";
+    if (!/xml\.oherbuttheds\.com\/click/i.test(href)) {
+      return null;
+    }
+    if (anchor.getAttribute("target") !== "_blank") {
+      return null;
+    }
+    if (!anchor.querySelector("img[src*='xml.oherbuttheds.com/thumbnail' i], .cbtoa") && !/click here/i.test(anchor.textContent || "")) {
+      return null;
+    }
+    return anchor;
+  }
+
+  function findExactImageBlockContainer(anchor) {
+    let current = anchor;
+    let best = anchor;
+    let depth = 0;
+    while (current instanceof HTMLElement && current !== document.body && depth < 4) {
+      if (isExactPopupWrapper(current)) {
+        best = current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return best;
+  }
+
+  function isExactPopupWrapper(node) {
+    if (node === document.documentElement || node === document.body) {
+      return false;
+    }
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    if (!rect.width || !rect.height || rect.width > window.innerWidth || rect.height > window.innerHeight * 0.95) {
+      return false;
+    }
+    const text = trimText(node.textContent);
+    return node.matches("a.image_block")
+      || node.querySelector("a.image_block[href*='xml.oherbuttheds.com/click' i]")
+      || (/click here/i.test(text) && (style.position === "fixed" || style.position === "absolute" || style.position === "relative"));
+  }
+
+  function removeExactFullscreenOverlays(roots, triggerNode) {
+    const selector = heuristics.safeSelectorList(state.pageRules.exactFullscreenOverlaySelectors || []).join(",");
+    if (!selector) {
+      return 0;
+    }
+    let removed = 0;
+    for (const node of queryWithinRoots(roots, selector, 30)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || node === triggerNode || triggerNode && triggerNode.contains(node)) {
+        continue;
+      }
+      if (!isExactFullscreenClickCatcher(node)) {
+        continue;
+      }
+      hideNode(node, "exact-fullscreen-click-catcher", exactPopupDetails(node, triggerNode || node, "fullscreen_overlay"));
+      removed += 1;
+    }
+    return removed;
+  }
+
+  function isExactFullscreenClickCatcher(node) {
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    const coversViewport = rect.left <= 2
+      && rect.top <= 2
+      && rect.width >= window.innerWidth * 0.95
+      && rect.height >= window.innerHeight * 0.95;
+    return style.position === "fixed"
+      && coversViewport
+      && Number.isFinite(zIndex)
+      && zIndex >= 2147483646
+      && style.pointerEvents === "auto"
+      && /rgba?\(\s*0\s*,\s*0\s*,\s*0\s*,\s*(0\.[3-9]|1|50%)/i.test(style.backgroundColor || "");
+  }
+
+  function removeExactPopupOrphans(target) {
+    let removed = 0;
+    const roots = uniqueElements([target.parentElement, document.documentElement].filter(Boolean));
+    for (const node of queryWithinRoots(roots, ".cbtoa, [class*='advertisement' i], [id*='advertisement' i], [class*='ad-label' i]", 25)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || target.contains(node)) {
+        continue;
+      }
+      if (!shouldRemoveOrphanJunkNode(node)) {
+        continue;
+      }
+      hideNode(node, "exact-popup-orphan-ui", orphanDetails(node, "exact", "image_block"));
+      removed += 1;
+    }
+    return removed;
+  }
+
+  function exactPopupDetails(node, triggerNode, signal) {
+    return {
+      action: "block",
+      pageType: state.pageType,
+      signal,
+      node: describeNode(node),
+      trigger: triggerNode ? describeNode(triggerNode) : "",
+      href: triggerNode && triggerNode.getAttribute ? triggerNode.getAttribute("href") || "" : "",
+      rect: rectSummary(node.getBoundingClientRect())
+    };
   }
 
   function removeChapterPopupLayers(roots) {
@@ -1484,6 +1692,11 @@
         popupLayersReremoved: 0,
         popupCardsMatched: 0,
         popupBackdropsNeutralized: 0,
+        imageBlockPopupRemoved: 0,
+        fullscreenOverlayRemoved: 0,
+        xmlOherbutthedsBlocked: 0,
+        brokenIframeRemoved: 0,
+        orphanAdUiRemoved: 0,
         orphanXRemoved: 0,
         rearmedHijackAttemptsBlocked: 0,
         expensiveScansSkipped: 0
