@@ -77,7 +77,8 @@
       "cpm.pressize.com",
       "oundhertobeconsist.org",
       "chubbyexemplaryhardiness.com",
-      "d3jzhqnvnvdy34.cloudfront.net"
+      "d3jzhqnvnvdy34.cloudfront.net",
+      "d2dxy39sqorbhv.cloudfront.net"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -228,7 +229,12 @@
           "cpm.pressize.com",
           "oundhertobeconsist.org",
           "chubbyexemplaryhardiness.com",
-          "d3jzhqnvnvdy34.cloudfront.net"
+          "d3jzhqnvnvdy34.cloudfront.net",
+          "d2dxy39sqorbhv.cloudfront.net",
+          "clicks.pipaffiliates.com",
+          "weiledsteverm.org",
+          "ghabovethec.info",
+          "shopee.co.th"
         ],
         hardHostKeywords: [
           "open88",
@@ -270,6 +276,11 @@
           "oundhertobeconsist.org",
           "chubbyexemplaryhardiness.com",
           "d3jzhqnvnvdy34.cloudfront.net",
+          "d2dxy39sqorbhv.cloudfront.net",
+          "clicks.pipaffiliates.com",
+          "weiledsteverm.org",
+          "ghabovethec.info",
+          "shopee.co.th",
           "open88",
           "fun88"
         ],
@@ -396,7 +407,8 @@
           "https://nn.coolishrocked.com/tnGqcEziwRRAkNS/126819",
           "https://yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js",
           "https://chubbyexemplaryhardiness.com/on.js",
-          "https://chubbyexemplaryhardiness.com/get/2090108"
+          "https://chubbyexemplaryhardiness.com/get/2090108",
+          "https://d2dxy39sqorbhv.cloudfront.net/"
         ],
         firstPartyAdScriptPaths: [
           "/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js",
@@ -426,6 +438,25 @@
           "__BI_SESSION_10144537",
           "__BI_SESSION_10144538",
           "isAddHistory"
+        ],
+        defaultDenyOffsiteNavigation: true,
+        offsiteNavigationDenyHosts: [
+          "shopee.co.th",
+          "clicks.pipaffiliates.com",
+          "oundhertobeconsist.org",
+          "weiledsteverm.org",
+          "ghabovethec.info",
+          "chubbyexemplaryhardiness.com"
+        ],
+        offsiteNavigationAllowHosts: [],
+        affiliateHintHosts: [
+          "s.shopee.co.th",
+          "shopee.co.th",
+          "clicks.pipaffiliates.com",
+          "oundhertobeconsist.org",
+          "weiledsteverm.org",
+          "ghabovethec.info",
+          "chubbyexemplaryhardiness.com"
         ],
         popupBackdropSelectors: [
           "[class*='overlay' i]",

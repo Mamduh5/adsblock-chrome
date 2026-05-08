@@ -110,6 +110,7 @@ vm.runInContext(
   assert(profile.pageRules.chapter.hardBlockHosts.includes("xml.oherbuttheds.com"), "chapter rules should include exact popup host");
   assert(profile.hardBlockHosts.includes("yougetwhatyoupayfor.net"), "profile should hard-block confirmed ad bootstrap host");
   assert(profile.hardBlockHosts.includes("chubbyexemplaryhardiness.com"), "profile should hard-block remaining popunder host");
+  assert(profile.hardBlockHosts.includes("d2dxy39sqorbhv.cloudfront.net"), "profile should hard-block final cloudfront loader host");
   assert(profile.staticRuleIds.includes(9), "profile should own final popunder static DNR rules");
   assert(profile.staticRuleIds.includes(10), "profile should own top-level floater navigation DNR rule");
   assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
@@ -132,6 +133,11 @@ vm.runInContext(
   assert(profile.pageRules.chapter.adContainerSelectors.includes("._0f84a320"), "chapter rules should include stable ad container class");
   assert(profile.pageRules.chapter.readerInjectedAdSelectors.some((selector) => selector.includes("max-height")), "chapter rules should include reader-injected ad block selectors");
   assert(profile.pageRules.chapter.remainingBudgetKeys.includes("__PPU_ppucnt"), "chapter rules should include exact popunder storage budget keys");
+  assert.strictEqual(profile.pageRules.chapter.defaultDenyOffsiteNavigation, true, "chapter rules should default-deny off-site navigation");
+  assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("shopee.co.th"), "chapter rules should deny direct Shopee affiliate opens");
+  assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("clicks.pipaffiliates.com"), "chapter rules should deny affiliate click hosts");
+  assert(profile.pageRules.chapter.affiliateHintHosts.includes("s.shopee.co.th"), "chapter rules should remove affiliate resource hints");
+  assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("d2dxy39sqorbhv.cloudfront.net")), "chapter rules should include final cloudfront loader");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");

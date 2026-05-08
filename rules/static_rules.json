@@ -161,7 +161,7 @@
         "mangakakalot.gg",
         "www.mangakakalot.gg"
       ],
-      "regexFilter": "^https?://(yougetwhatyoupayfor\\.net/(popup/popup-v4\\.js|6b19cf019d81\\.js|banners-web/mangakakalot\\.gg\\.js)|cdnpf\\.com/6976e0119fd94812e8e10262\\.js|acscdn\\.com/script/(banner\\.js|suv5\\.js)|clammyendearedkeg\\.com/bn\\.js|nn\\.coolishrocked\\.com/tnGqcEziwRRAkNS/126819|chubbyexemplaryhardiness\\.com/(on\\.js|get/2090108[^?#]*))([?#]|$)",
+      "regexFilter": "^https?://(yougetwhatyoupayfor\\.net/(popup/popup-v4\\.js|6b19cf019d81\\.js|banners-web/mangakakalot\\.gg\\.js)|cdnpf\\.com/6976e0119fd94812e8e10262\\.js|acscdn\\.com/script/(banner\\.js|suv5\\.js)|clammyendearedkeg\\.com/bn\\.js|nn\\.coolishrocked\\.com/tnGqcEziwRRAkNS/126819|chubbyexemplaryhardiness\\.com/(on\\.js|get/2090108[^?#]*)|d2dxy39sqorbhv\\.cloudfront\\.net/)([?#]|$)",
       "resourceTypes": [
         "script"
       ]

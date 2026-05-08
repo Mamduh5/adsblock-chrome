@@ -320,6 +320,18 @@
       + " budget keys, "
       + String(perf.floaterRequestBlocked || 0)
       + " floater blocked, "
+      + String(perf.offsiteBlankPopupBlocked || 0)
+      + " blank popups, "
+      + String(perf.offsiteWindowOpenBlocked || 0)
+      + " offsite opens, "
+      + String(perf.offsiteTopNavigationBlocked || 0)
+      + " offsite navs, "
+      + String(perf.affiliateHostBlocked || 0)
+      + " affiliate hits, "
+      + String(perf.cloudfrontLoaderBlocked || 0)
+      + " cloudfront loaders, "
+      + String(perf.chubbyLoaderBlocked || 0)
+      + " chubby loaders, "
       + String(perf.rearmedHijackAttemptsBlocked || 0)
       + " rearmed blocked, "
       + String(perf.eventsDropped || 0)

@@ -129,7 +129,7 @@ Confirmed exact Mangakakalot popup family handling:
 Confirmed chapter ad bootstrap blocking now happens before most DOM cleanup:
 
 - static DNR blocks `yougetwhatyoupayfor.net/popup/popup-v4.js`, `yougetwhatyoupayfor.net/6b19cf019d81.js`, `cdnpf.com/6976e0119fd94812e8e10262.js`, `acscdn.com/script/banner.js`, `acscdn.com/script/suv5.js`, `clammyendearedkeg.com/bn.js`, and `nn.coolishrocked.com/tnGqcEziwRRAkNS/126819`
-- static DNR also blocks `yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js`, `chubbyexemplaryhardiness.com/on.js`, `chubbyexemplaryhardiness.com/get/2090108`, `oundhertobeconsist.org/floater`, and the campaign URL `d3jzhqnvnvdy34.cloudfront.net/?qhzjd=1246039`
+- static DNR also blocks `yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js`, `chubbyexemplaryhardiness.com/on.js`, `chubbyexemplaryhardiness.com/get/2090108`, `oundhertobeconsist.org/floater`, the campaign URL `d3jzhqnvnvdy34.cloudfront.net/?qhzjd=1246039`, and the final loader `d2dxy39sqorbhv.cloudfront.net/?syxdd=1257018`
 - static DNR blocks exact first-party ad loaders `/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js`, `/js/ads/clck-adu-kklgg.js`, and `/js/ads/admaven.js`
 - static DNR blocks sync/user-sync iframe traffic to `sync.adkernel.com` and `cpm.pressize.com`
 - content cleanup removes matching script tags if they are inserted anyway
@@ -147,6 +147,13 @@ The remaining invisible popunder is blocked at request/navigation level:
 - DNR rule `10` blocks top-level navigation to `||oundhertobeconsist.org/floater` even if Chrome does not preserve the Mangakakalot initiator on a new tab
 - MAIN-world `page_guard.js` blocks the same endpoint through `window.open`, programmatic anchor opens, `location.assign`, `location.replace`, attempted `location.href`, `fetch`, `XMLHttpRequest.open/send`, and `navigator.sendBeacon`
 - Query strings are intentionally not exact-matched because `cs=...` rotates; the stable host/path is `oundhertobeconsist.org/floater`
+
+The final affiliate-tab bypass is handled with a chapter-page default-deny policy:
+
+- `pageRules.chapter.defaultDenyOffsiteNavigation` blocks off-site `window.open`, programmatic anchor opens, and location navigation from chapter pages unless explicitly allowlisted.
+- `window.open("", ...)`, `window.open("about:blank", ...)`, and missing/null popup URLs are blocked on chapter pages because the ad stack can open a blank tab first and navigate it later.
+- Affiliate/popunder hosts are denied in the page guard: `clicks.pipaffiliates.com`, `oundhertobeconsist.org`, `weiledsteverm.org`, `ghabovethec.info`, `chubbyexemplaryhardiness.com`, and direct `shopee.co.th` affiliate opens.
+- Resource hints such as `preconnect` and `dns-prefetch` to those affiliate hosts are removed on chapter pages.
 
 ## Runtime Model
 

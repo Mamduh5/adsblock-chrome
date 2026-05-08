@@ -44,10 +44,11 @@
           }
         }));
       }
-      if (shouldBlockNavigation(activeProfile, url)) {
+      if (isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url)) {
         const attempt = markBlockedOpenAttempt();
+        const details = blockDetails(activeProfile, url, "window_open");
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
-          detail: {
+          detail: Object.assign(details, {
             profileId: activeProfile.id,
             url: String(url || ""),
             target: String(target || ""),
@@ -58,7 +59,7 @@
             duplicateAttempt: attempt.duplicateAttempt,
             openAttemptsForClick: attempt.openAttemptsForClick,
             afterMutationBurst: isAfterMutationBurst(activeProfile)
-          }
+          })
         }));
         return null;
       }
@@ -72,8 +73,9 @@
       const href = this.getAttribute("href") || "";
       if (shouldBlockNavigation(activeProfile, href)) {
         const attempt = markBlockedOpenAttempt();
+        const details = blockDetails(activeProfile, href, this.getAttribute("target") === "_blank" ? "anchor_blank" : "anchor_click");
         window.dispatchEvent(new CustomEvent("site-shield-open-blocked", {
-          detail: {
+          detail: Object.assign(details, {
             profileId: activeProfile.id,
             action: "block",
             source: this.getAttribute("target") === "_blank" ? "anchor_blank" : "anchor_click",
@@ -85,7 +87,7 @@
             duplicateAttempt: attempt.duplicateAttempt,
             openAttemptsForClick: attempt.openAttemptsForClick,
             afterMutationBurst: isAfterMutationBurst(activeProfile)
-          }
+          })
         }));
         return undefined;
       }
@@ -109,9 +111,9 @@
     const originalFetch = window.fetch;
     window.fetch = function guardedFetch(input, init) {
       const url = requestUrl(input);
-      if (isFloaterUrl(url)) {
-        dispatchFloaterBlocked(activeProfile, "fetch", url);
-        return Promise.reject(new TypeError("Site Shield blocked floater fetch"));
+      if (shouldBlockRequestUrl(activeProfile, url)) {
+        dispatchRequestBlocked(activeProfile, "fetch", url);
+        return Promise.reject(new TypeError("Site Shield blocked chapter request"));
       }
       return originalFetch.call(this, input, init);
     };
@@ -125,14 +127,14 @@
     const originalSend = XMLHttpRequest.prototype.send;
     XMLHttpRequest.prototype.open = function guardedXhrOpen(method, url) {
       this.__siteShieldUrl = String(url || "");
-      this.__siteShieldFloaterBlocked = isFloaterUrl(url);
-      if (this.__siteShieldFloaterBlocked) {
-        dispatchFloaterBlocked(activeProfile, "xhr", url);
+      this.__siteShieldRequestBlocked = shouldBlockRequestUrl(activeProfile, url);
+      if (this.__siteShieldRequestBlocked) {
+        dispatchRequestBlocked(activeProfile, "xhr", url);
       }
       return originalOpen.apply(this, arguments);
     };
     XMLHttpRequest.prototype.send = function guardedXhrSend() {
-      if (this.__siteShieldFloaterBlocked) {
+      if (this.__siteShieldRequestBlocked) {
         return undefined;
       }
       return originalSend.apply(this, arguments);
@@ -145,8 +147,8 @@
     }
     const originalBeacon = navigator.sendBeacon.bind(navigator);
     navigator.sendBeacon = function guardedSendBeacon(url, data) {
-      if (isFloaterUrl(url)) {
-        dispatchFloaterBlocked(activeProfile, "beacon", url);
+      if (shouldBlockRequestUrl(activeProfile, url)) {
+        dispatchRequestBlocked(activeProfile, "beacon", url);
         return false;
       }
       return originalBeacon(url, data);
@@ -209,12 +211,13 @@
     const url = clickable ? clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || "" : "";
     const junk = url && isPageJunkUrl(activeProfile, url);
     const floater = url && isFloaterUrl(url);
+    const affiliate = url && isAffiliateNavigationUrl(activeProfile, url);
     const offsite = url && isOffsiteUrl(activeProfile, url);
     const readerClick = Boolean(rules.shieldPlainReaderClicks && isInsideReaderArea(rules, target));
     const plainChapterClick = Boolean(rules.shieldPlainChapterClicks && !url);
     const largeSurface = isLargeClickSurface(target);
 
-    if (!junk && !floater && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
+    if (!junk && !floater && !affiliate && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
       return;
     }
 
@@ -235,7 +238,8 @@
         afterMutationBurst: isAfterMutationBurst(activeProfile),
         url: String(url || ""),
         host: url ? getUrlHost(url) : "",
-        reason: floater ? "floater_anchor" : junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
+        reason: floater ? "floater_anchor" : affiliate ? "affiliate_host" : junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
+        affiliateHost: affiliate,
         target: describeElement(target)
       }
     }));
@@ -291,8 +295,9 @@
           value: function guardedLocationChange(url) {
             if (shouldBlockNavigation(activeProfile, url)) {
               const attempt = markBlockedOpenAttempt();
+              const details = blockDetails(activeProfile, url, method === "assign" ? "location_assign" : "location_replace");
               window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
-                detail: {
+                detail: Object.assign(details, {
                   profileId: activeProfile.id,
                   action: "block",
                   source: method === "assign" ? "location_assign" : "location_replace",
@@ -303,7 +308,7 @@
                   duplicateAttempt: attempt.duplicateAttempt,
                   openAttemptsForClick: attempt.openAttemptsForClick,
                   afterMutationBurst: isAfterMutationBurst(activeProfile)
-                }
+                })
               }));
               return undefined;
             }
@@ -337,8 +342,9 @@
         set: function setGuardedHref(url) {
           if (shouldBlockNavigation(activeProfile, url)) {
             const attempt = markBlockedOpenAttempt();
+            const details = blockDetails(activeProfile, url, "location_href");
             window.dispatchEvent(new CustomEvent("site-shield-location-blocked", {
-              detail: {
+              detail: Object.assign(details, {
                 profileId: activeProfile.id,
                 action: "block",
                 source: "location_href",
@@ -349,7 +355,7 @@
                 duplicateAttempt: attempt.duplicateAttempt,
                 openAttemptsForClick: attempt.openAttemptsForClick,
                 afterMutationBurst: isAfterMutationBurst(activeProfile)
-              }
+              })
             }));
             return undefined;
           }
@@ -461,10 +467,64 @@
     return Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
   }
 
+  function isBlockedBlankPopup(activeProfile, url) {
+    if (detectPageType(activeProfile) !== "chapter") {
+      return false;
+    }
+    const rawUrl = String(url == null ? "" : url).trim();
+    return rawUrl === "" || /^about:blank(?:[#?].*)?$/i.test(rawUrl);
+  }
+
   function shouldBlockNavigation(activeProfile, url) {
-    return isFloaterUrl(url)
-      || isSuspiciousUrl(activeProfile, url)
-      || (isGuardedClickWindow(activeProfile) && isOffsiteUrl(activeProfile, url));
+    const pageType = detectPageType(activeProfile);
+    if (isFloaterUrl(url) || isSuspiciousUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url)) {
+      return true;
+    }
+    if (pageType !== "chapter") {
+      return isGuardedClickWindow(activeProfile) && isOffsiteUrl(activeProfile, url);
+    }
+    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    return Boolean(rules.defaultDenyOffsiteNavigation && isOffsiteUrl(activeProfile, url) && !isExplicitlyAllowedOffsite(activeProfile, url));
+  }
+
+  function shouldBlockRequestUrl(activeProfile, url) {
+    return isFloaterUrl(url) || isAffiliateNavigationUrl(activeProfile, url);
+  }
+
+  function isAffiliateNavigationUrl(activeProfile, url) {
+    const host = getUrlHost(url);
+    if (!host) {
+      return false;
+    }
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)] || {};
+    return (rules.offsiteNavigationDenyHosts || []).some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost));
+  }
+
+  function isExplicitlyAllowedOffsite(activeProfile, url) {
+    const host = getUrlHost(url);
+    if (!host) {
+      return false;
+    }
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)] || {};
+    return (rules.offsiteNavigationAllowHosts || []).some((allowHost) => heuristics.isSubdomainOrSame(host, allowHost));
+  }
+
+  function blockDetails(activeProfile, url, source) {
+    const rawUrl = String(url || "");
+    const host = getUrlHost(url);
+    const blankPopup = source === "window_open" && isBlockedBlankPopup(activeProfile, url);
+    const floater = isFloaterUrl(url);
+    const affiliateHost = isAffiliateNavigationUrl(activeProfile, url);
+    const offsite = Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
+    return {
+      host,
+      blankPopup,
+      floater,
+      affiliateHost,
+      offsite,
+      reason: blankPopup ? "blank_popup" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "suspicious_navigation",
+      url: rawUrl
+    };
   }
 
   function isFirstPartyUrl(url) {
@@ -522,7 +582,7 @@
     }
   }
 
-  function dispatchFloaterBlocked(activeProfile, source, url) {
+  function dispatchRequestBlocked(activeProfile, source, url) {
     window.dispatchEvent(new CustomEvent("site-shield-floater-blocked", {
       detail: {
         profileId: activeProfile.id,
@@ -530,6 +590,8 @@
         source,
         url: String(url || ""),
         host: getUrlHost(url),
+        floater: isFloaterUrl(url),
+        affiliateHost: isAffiliateNavigationUrl(activeProfile, url),
         clickCount: shieldState.clickCount,
         clickSerial: shieldState.clickSerial,
         afterMutationBurst: isAfterMutationBurst(activeProfile)

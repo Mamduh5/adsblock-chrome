@@ -64,6 +64,12 @@
       floaterWindowOpenBlocked: 0,
       floaterLocationBlocked: 0,
       floaterAnchorBlocked: 0,
+      offsiteBlankPopupBlocked: 0,
+      offsiteWindowOpenBlocked: 0,
+      offsiteTopNavigationBlocked: 0,
+      affiliateHostBlocked: 0,
+      cloudfrontLoaderBlocked: 0,
+      chubbyLoaderBlocked: 0,
       centeredPopupIframeRemoved: 0,
       popupSiblingFixedDivRemoved: 0,
       remainingBudgetKeysCleared: 0,
@@ -127,7 +133,8 @@
         opensBlocked: 1,
         duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
         rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
-        ...floaterPerfDelta(event.detail)
+        ...floaterPerfDelta(event.detail),
+        ...finalBypassPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
@@ -137,7 +144,8 @@
       addPerfDelta({
         clicksShielded: 1,
         rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
-        ...floaterPerfDelta(event.detail)
+        ...floaterPerfDelta(event.detail),
+        ...finalBypassPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter click shield blocked handler path", Object.assign({
         action: "block",
@@ -151,7 +159,8 @@
         opensBlocked: 1,
         duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
         rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0,
-        ...floaterPerfDelta(event.detail)
+        ...floaterPerfDelta(event.detail),
+        ...finalBypassPerfDelta(event.detail)
       });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Location redirect blocked during guarded click", Object.assign({
         action: "block",
@@ -174,8 +183,8 @@
     });
     window.addEventListener("site-shield-floater-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
-      addPerfDelta(floaterPerfDelta(event.detail));
-      recordEvent(config.EVENT_CATEGORIES.NETWORK, "Floater request blocked", Object.assign({
+      addPerfDelta(Object.assign({}, floaterPerfDelta(event.detail), finalBypassPerfDelta(event.detail)));
+      recordEvent(config.EVENT_CATEGORIES.NETWORK, event.detail && event.detail.floater ? "Floater request blocked" : "Affiliate request blocked", Object.assign({
         action: "block",
         pageType: state.pageType
       }, event.detail || {}));
@@ -196,6 +205,21 @@
       floaterWindowOpenBlocked: source === "window_open" ? 1 : 0,
       floaterLocationBlocked: source === "location_assign" || source === "location_replace" || source === "location_href" ? 1 : 0,
       floaterAnchorBlocked: source === "anchor_blank" || source === "anchor_click" || source === "anchor" ? 1 : 0
+    };
+  }
+
+  function finalBypassPerfDelta(detail) {
+    if (!detail) {
+      return {};
+    }
+    const source = String(detail.source || "");
+    const host = String(detail.host || heuristics.getUrlHostname(detail.url || "", location.href) || "").toLowerCase();
+    const affiliateHost = Boolean(detail.affiliateHost || isAffiliateHintHost(host));
+    return {
+      offsiteBlankPopupBlocked: detail.blankPopup ? 1 : 0,
+      offsiteWindowOpenBlocked: source === "window_open" && (detail.offsite || affiliateHost || detail.blankPopup) ? 1 : 0,
+      offsiteTopNavigationBlocked: source === "location_assign" || source === "location_replace" || source === "location_href" ? 1 : 0,
+      affiliateHostBlocked: affiliateHost ? 1 : 0
     };
   }
 
@@ -383,6 +407,8 @@
       ".banner-container",
       ".ads-banner",
       "script[src]",
+      "link[rel~='preconnect'][href]",
+      "link[rel~='dns-prefetch'][href]",
       "iframe[src^='undefined/iframe' i]",
       "iframe[src*='pid=undefined' i]",
       "[style*='linear-gradient' i]",
@@ -439,6 +465,7 @@
 
     let removed = 0;
     if (state.pageType === "chapter") {
+      removed += removeAffiliateHints(roots);
       removed += removeKnownChapterAdScripts(roots);
       removed += removeExactChapterPopupFamily(roots);
       removed += removeFixedPopupSiblingDivs(null);
@@ -552,6 +579,8 @@
     let removed = 0;
     let firstParty = 0;
     let admavenOrClck = 0;
+    let cloudfront = 0;
+    let chubby = 0;
     for (const script of scripts) {
       if (!(script instanceof HTMLScriptElement) || state.removedNodes.has(script)) {
         continue;
@@ -570,13 +599,42 @@
       removed += 1;
       firstParty += reason === "first_party_ad_loader" ? 1 : 0;
       admavenOrClck += /\/js\/ads\/(admaven|clck-adu-kklgg)\.js/i.test(src) ? 1 : 0;
+      cloudfront += /:\/\/d2dxy39sqorbhv\.cloudfront\.net\//i.test(src) ? 1 : 0;
+      chubby += /:\/\/chubbyexemplaryhardiness\.com\/(on\.js|get\/2090108)/i.test(src) ? 1 : 0;
     }
     if (removed > 0) {
       addPerfDelta({
         blockedAdBootstrapScripts: removed - firstParty,
         blockedFirstPartyAdLoader: firstParty,
-        admavenOrClckLoaderBlocked: admavenOrClck
+        admavenOrClckLoaderBlocked: admavenOrClck,
+        cloudfrontLoaderBlocked: cloudfront,
+        chubbyLoaderBlocked: chubby
       });
+    }
+    return removed;
+  }
+
+  function removeAffiliateHints(roots) {
+    const hints = queryWithinRoots(roots, "link[rel~='preconnect'][href], link[rel~='dns-prefetch'][href]", 30);
+    let removed = 0;
+    for (const link of hints) {
+      if (!(link instanceof HTMLLinkElement) || state.removedNodes.has(link)) {
+        continue;
+      }
+      const host = heuristics.getUrlHostname(link.getAttribute("href") || "", location.href);
+      if (!isAffiliateHintHost(host)) {
+        continue;
+      }
+      removeNode(link, "chapter-affiliate-resource-hint", {
+        action: "block",
+        pageType: state.pageType,
+        host,
+        rel: link.getAttribute("rel") || ""
+      });
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta({ affiliateHostBlocked: removed });
     }
     return removed;
   }
@@ -2004,6 +2062,31 @@
         brokenIframeRemoved: 0,
         orphanAdUiRemoved: 0,
         orphanXRemoved: 0,
+        blockedAdBootstrapScripts: 0,
+        blockedFirstPartyAdLoader: 0,
+        fixedPopupIframeRemoved: 0,
+        adContainerRemoved: 0,
+        readerInjectedAdBlockRemoved: 0,
+        hiddenOnlyFallbackCount: 0,
+        floaterRequestBlocked: 0,
+        floaterMainFrameBlocked: 0,
+        floaterFetchBlocked: 0,
+        floaterXhrBlocked: 0,
+        floaterBeaconBlocked: 0,
+        floaterWindowOpenBlocked: 0,
+        floaterLocationBlocked: 0,
+        floaterAnchorBlocked: 0,
+        offsiteBlankPopupBlocked: 0,
+        offsiteWindowOpenBlocked: 0,
+        offsiteTopNavigationBlocked: 0,
+        affiliateHostBlocked: 0,
+        cloudfrontLoaderBlocked: 0,
+        chubbyLoaderBlocked: 0,
+        centeredPopupIframeRemoved: 0,
+        popupSiblingFixedDivRemoved: 0,
+        remainingBudgetKeysCleared: 0,
+        undefinedIframeRemoved: 0,
+        admavenOrClckLoaderBlocked: 0,
         rearmedHijackAttemptsBlocked: 0,
         expensiveScansSkipped: 0
       };
@@ -2182,6 +2265,15 @@
 
   function isChapterJunkUrl(url) {
     return state.pageType === "chapter" && Boolean(chapterJunkTrigger(url, ""));
+  }
+
+  function isAffiliateHintHost(hostname) {
+    const host = String(hostname || "").toLowerCase();
+    if (!host) {
+      return false;
+    }
+    const hosts = (state.pageRules.affiliateHintHosts || []).concat(state.pageRules.offsiteNavigationDenyHosts || []);
+    return hosts.some((candidate) => heuristics.isSubdomainOrSame(host, candidate));
   }
 
   function detectPageType(profile) {
