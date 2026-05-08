@@ -261,5 +261,62 @@
         "script"
       ]
     }
+  },
+  {
+    "id": 12,
+    "priority": 25,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "requestDomains": [
+        "chubbyexemplaryhardiness.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 13,
+    "priority": 25,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://withagecomeswisdom\\.live/api/ads/get-info/v2([/?#]|$)",
+      "resourceTypes": [
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 14,
+    "priority": 30,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||chubbyexemplaryhardiness.com/get/2090108",
+      "resourceTypes": [
+        "main_frame"
+      ]
+    }
   }
 ]

@@ -69,6 +69,12 @@ const perfCounters = {
   blankPopupStubReturned: 0,
   offsitePopupStubReturned: 0,
   popupReuseAttemptBlocked: 0,
+  chubbyGetBlocked: 0,
+  chubbyOnJsBlocked: 0,
+  withageConfigBlocked: 0,
+  badScriptSrcDenied: 0,
+  badIframeSrcDenied: 0,
+  frameContextPopupBlocked: 0,
   cloudfrontLoaderBlocked: 0,
   chubbyLoaderBlocked: 0,
   centeredPopupIframeRemoved: 0,
@@ -108,7 +114,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((event) => {
     const initiator = event.request.initiator || event.request.documentUrl || "";
-    const profile = profileFromUrl(initiator);
+    const profile = profileFromUrl(initiator) || profileForGlobalStaticRule(event.rule.ruleId);
     if (!profile) {
       return;
     }
@@ -121,12 +127,17 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
       });
     } else if (event.rule.ruleId === 7) {
       mergePerfCounters({ admavenOrClckLoaderBlocked: 1 });
-    } else if (event.rule.ruleId === 6 || event.rule.ruleId === 11) {
+    } else if (event.rule.ruleId === 6 || event.rule.ruleId === 11 || event.rule.ruleId === 12 || event.rule.ruleId === 14) {
       const requestHost = heuristics.getUrlHostname(event.request.url);
+      const requestPath = requestPathname(event.request.url);
       mergePerfCounters({
         cloudfrontLoaderBlocked: requestHost === "d2dxy39sqorbhv.cloudfront.net" ? 1 : 0,
-        chubbyLoaderBlocked: requestHost === "chubbyexemplaryhardiness.com" ? 1 : 0
+        chubbyLoaderBlocked: requestHost === "chubbyexemplaryhardiness.com" ? 1 : 0,
+        chubbyGetBlocked: requestHost === "chubbyexemplaryhardiness.com" && /^\/get\/2090108(?:\/|$)/i.test(requestPath) ? 1 : 0,
+        chubbyOnJsBlocked: requestHost === "chubbyexemplaryhardiness.com" && requestPath === "/on.js" ? 1 : 0
       });
+    } else if (event.rule.ruleId === 13) {
+      mergePerfCounters({ withageConfigBlocked: 1 });
     }
     recordEvent(profile.id, config.EVENT_CATEGORIES.NETWORK, "Request blocked", {
       action: "block",
@@ -464,6 +475,7 @@ function contentScriptRegistrationsForProfile(profile) {
     id: contentScriptId(profile),
     matches: profile.matchPatterns,
     allFrames: true,
+    matchOriginAsFallback: true,
     runAt: "document_start",
     persistAcrossSessions: true,
     world: "ISOLATED",
@@ -476,6 +488,7 @@ function contentScriptRegistrationsForProfile(profile) {
       id: pageGuardScriptId(profile),
       matches: profile.matchPatterns,
       allFrames: true,
+      matchOriginAsFallback: true,
       runAt: "document_start",
       persistAcrossSessions: true,
       world: "MAIN",
@@ -931,6 +944,8 @@ async function buildDebugSnapshot(profileId, hostname) {
       .map((script) => ({
         id: script.id,
         matches: script.matches,
+        allFrames: Boolean(script.allFrames),
+        matchOriginAsFallback: Boolean(script.matchOriginAsFallback),
         world: script.world || "ISOLATED",
         runAt: script.runAt
       })),
@@ -1015,6 +1030,12 @@ function mergePerfCounters(delta) {
     "blankPopupStubReturned",
     "offsitePopupStubReturned",
     "popupReuseAttemptBlocked",
+    "chubbyGetBlocked",
+    "chubbyOnJsBlocked",
+    "withageConfigBlocked",
+    "badScriptSrcDenied",
+    "badIframeSrcDenied",
+    "frameContextPopupBlocked",
     "cloudfrontLoaderBlocked",
     "chubbyLoaderBlocked",
     "centeredPopupIframeRemoved",
@@ -1143,6 +1164,18 @@ async function requestProfileHostPermission(profile) {
 
 function getSenderHost(sender) {
   return heuristics.getUrlHostname(sender && sender.url ? sender.url : "");
+}
+
+function profileForGlobalStaticRule(ruleId) {
+  return ruleId === 14 ? profiles.getById("mangakakalot") : null;
+}
+
+function requestPathname(url) {
+  try {
+    return new URL(String(url || "")).pathname;
+  } catch (error) {
+    return "";
+  }
 }
 
 self.SiteShieldBackgroundInternals = {

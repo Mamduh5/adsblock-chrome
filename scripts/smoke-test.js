@@ -115,7 +115,13 @@ vm.runInContext(
   assert(profile.staticRuleIds.includes(9), "profile should own final popunder static DNR rules");
   assert(profile.staticRuleIds.includes(10), "profile should own top-level floater navigation DNR rule");
   assert(profile.staticRuleIds.includes(11), "profile should own final CloudFront syxdd loader DNR rule");
+  assert(profile.staticRuleIds.includes(12), "profile should own comprehensive chubby host DNR rule");
+  assert(profile.staticRuleIds.includes(13), "profile should own withage config DNR rule");
+  assert(profile.staticRuleIds.includes(14), "profile should own global chubby get top-level DNR rule");
   assert(staticRules.some((rule) => rule.id === 11 && rule.condition.requestDomains.includes("d2dxy39sqorbhv.cloudfront.net")), "static DNR should include host-level CloudFront syxdd loader rule");
+  assert(staticRules.some((rule) => rule.id === 12 && rule.condition.requestDomains.includes("chubbyexemplaryhardiness.com") && rule.condition.resourceTypes.includes("main_frame")), "static DNR should include broad chubby chain rule");
+  assert(staticRules.some((rule) => rule.id === 13 && rule.condition.regexFilter.includes("withagecomeswisdom")), "static DNR should include withage config rule");
+  assert(staticRules.some((rule) => rule.id === 14 && rule.condition.urlFilter.includes("chubbyexemplaryhardiness.com/get/2090108")), "static DNR should include top-level chubby get rule");
   assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
@@ -141,6 +147,9 @@ vm.runInContext(
   assert(Array.isArray(profile.pageRules.chapter.popupAllowSameOriginPaths), "chapter rules should expose popup same-origin allowlist");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("shopee.co.th"), "chapter rules should deny direct Shopee affiliate opens");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("xm.com"), "chapter rules should deny direct XM affiliate opens");
+  assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("chubbyexemplaryhardiness.com"), "chapter rules should deny chubby popup opens");
+  assert(profile.pageRules.chapter.dynamicElementDenyHosts.includes("withagecomeswisdom.live"), "chapter rules should deny dynamic withage script/frame insertion");
+  assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("withagecomeswisdom.live")), "chapter rules should include withage config endpoint");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("clicks.pipaffiliates.com"), "chapter rules should deny affiliate click hosts");
   assert(profile.pageRules.chapter.affiliateHintHosts.includes("s.shopee.co.th"), "chapter rules should remove affiliate resource hints");
   assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("d2dxy39sqorbhv.cloudfront.net")), "chapter rules should include final cloudfront loader");
@@ -161,6 +170,8 @@ vm.runInContext(
   assert(pageGuard, "page guard should register");
   assert.strictEqual(pageGuard.world, "MAIN", "page guard must run in MAIN world");
   assert(pageGuard.runAt === "document_start", "page guard should run at document_start");
+  assert.strictEqual(pageGuard.allFrames, true, "page guard should run in all frames");
+  assert.strictEqual(pageGuard.matchOriginAsFallback, true, "page guard should use origin fallback for inherited frames");
 
   const snapshot = await internals.buildDebugSnapshot("mangakakalot", "mangakakalot.gg");
   assert.strictEqual(snapshot.activeProfileId, "mangakakalot", "snapshot should include active profile");

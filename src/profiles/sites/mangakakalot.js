@@ -34,7 +34,10 @@
       8,
       9,
       10,
-      11
+      11,
+      12,
+      13,
+      14
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -79,7 +82,8 @@
       "oundhertobeconsist.org",
       "chubbyexemplaryhardiness.com",
       "d3jzhqnvnvdy34.cloudfront.net",
-      "d2dxy39sqorbhv.cloudfront.net"
+      "d2dxy39sqorbhv.cloudfront.net",
+      "withagecomeswisdom.live"
     ],
     candidateBlockHosts: [
       "adskeeper.com",
@@ -232,6 +236,7 @@
           "chubbyexemplaryhardiness.com",
           "d3jzhqnvnvdy34.cloudfront.net",
           "d2dxy39sqorbhv.cloudfront.net",
+          "withagecomeswisdom.live",
           "clicks.pipaffiliates.com",
           "weiledsteverm.org",
           "ghabovethec.info",
@@ -279,6 +284,7 @@
           "chubbyexemplaryhardiness.com",
           "d3jzhqnvnvdy34.cloudfront.net",
           "d2dxy39sqorbhv.cloudfront.net",
+          "withagecomeswisdom.live",
           "clicks.pipaffiliates.com",
           "weiledsteverm.org",
           "ghabovethec.info",
@@ -411,6 +417,7 @@
           "https://yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js",
           "https://chubbyexemplaryhardiness.com/on.js",
           "https://chubbyexemplaryhardiness.com/get/2090108",
+          "https://withagecomeswisdom.live/api/ads/get-info/v2",
           "https://d2dxy39sqorbhv.cloudfront.net/"
         ],
         firstPartyAdScriptPaths: [
@@ -452,7 +459,8 @@
           "oundhertobeconsist.org",
           "weiledsteverm.org",
           "ghabovethec.info",
-          "chubbyexemplaryhardiness.com"
+          "chubbyexemplaryhardiness.com",
+          "withagecomeswisdom.live"
         ],
         offsiteNavigationAllowHosts: [],
         affiliateHintHosts: [
@@ -464,6 +472,13 @@
           "weiledsteverm.org",
           "ghabovethec.info",
           "chubbyexemplaryhardiness.com",
+          "withagecomeswisdom.live",
+          "d2dxy39sqorbhv.cloudfront.net"
+        ],
+        dynamicElementDenyHosts: [
+          "chubbyexemplaryhardiness.com",
+          "oundhertobeconsist.org",
+          "withagecomeswisdom.live",
           "d2dxy39sqorbhv.cloudfront.net"
         ],
         popupBackdropSelectors: [

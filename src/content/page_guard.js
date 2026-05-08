@@ -3,7 +3,7 @@
 
   const profiles = globalThis.SiteShieldProfiles;
   const heuristics = globalThis.SiteShieldHeuristics;
-  const profile = profiles && profiles.findByHostname(location.hostname);
+  const profile = profiles && profiles.findByHostname(resolveContextHostname());
 
   if (!profile || window.__SITE_SHIELD_PAGE_GUARD_INSTALLED__) {
     return;
@@ -26,6 +26,7 @@
 
   installChapterClickShield(profile);
   installChapterRequestGuards(profile);
+  installChapterElementCreationGuards(profile);
   patchLocationMethods(profile);
   patchLocationHref(profile);
 
@@ -97,12 +98,111 @@
   }
 
   function installChapterRequestGuards(activeProfile) {
-    if (detectPageType(activeProfile) !== "chapter") {
+    if (!isChapterContext(activeProfile)) {
       return;
     }
     patchFetch(activeProfile);
     patchXhr(activeProfile);
     patchSendBeacon(activeProfile);
+  }
+
+  function installChapterElementCreationGuards(activeProfile) {
+    if (!isChapterContext(activeProfile)) {
+      return;
+    }
+    patchCreateElement(activeProfile);
+    patchElementSetAttribute(activeProfile);
+    patchElementSrcSetter(activeProfile, HTMLScriptElement, "script");
+    patchElementSrcSetter(activeProfile, HTMLIFrameElement, "iframe");
+    patchNodeInsertion(activeProfile, "appendChild");
+    patchNodeInsertion(activeProfile, "insertBefore");
+  }
+
+  function patchCreateElement(activeProfile) {
+    if (!Document.prototype || typeof Document.prototype.createElement !== "function") {
+      return;
+    }
+    const originalCreateElement = Document.prototype.createElement;
+    Document.prototype.createElement = function guardedCreateElement(tagName, options) {
+      const element = originalCreateElement.call(this, tagName, options);
+      const tag = String(tagName || "").toLowerCase();
+      if (tag === "script" || tag === "iframe") {
+        try {
+          element.setAttribute("data-site-shield-created", "true");
+        } catch (error) {
+          return element;
+        }
+      }
+      return element;
+    };
+  }
+
+  function patchElementSetAttribute(activeProfile) {
+    if (!Element.prototype || typeof Element.prototype.setAttribute !== "function") {
+      return;
+    }
+    const originalSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function guardedSetAttribute(name, value) {
+      const attrName = String(name || "").toLowerCase();
+      if (attrName === "src" && isGuardedMediaElement(this)) {
+        const tag = this.tagName.toLowerCase();
+        const source = tag + "_setAttribute";
+        if (shouldDenyDynamicElementUrl(activeProfile, tag, value)) {
+          neutralizeDynamicElement(activeProfile, this, tag, value, source);
+          return undefined;
+        }
+      }
+      return originalSetAttribute.apply(this, arguments);
+    };
+  }
+
+  function patchElementSrcSetter(activeProfile, constructor, tag) {
+    if (typeof constructor !== "function" || !constructor.prototype) {
+      return;
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(constructor.prototype, "src")
+      || Object.getOwnPropertyDescriptor(HTMLElement.prototype, "src");
+    if (!descriptor || typeof descriptor.set !== "function" || typeof descriptor.get !== "function") {
+      return;
+    }
+    try {
+      Object.defineProperty(constructor.prototype, "src", {
+        configurable: true,
+        enumerable: descriptor.enumerable,
+        get: function getGuardedSrc() {
+          return descriptor.get.call(this);
+        },
+        set: function setGuardedSrc(value) {
+          if (shouldDenyDynamicElementUrl(activeProfile, tag, value)) {
+            neutralizeDynamicElement(activeProfile, this, tag, value, tag + "_src_setter");
+            return undefined;
+          }
+          return descriptor.set.call(this, value);
+        }
+      });
+    } catch (error) {
+      return;
+    }
+  }
+
+  function patchNodeInsertion(activeProfile, method) {
+    if (!Node.prototype || typeof Node.prototype[method] !== "function") {
+      return;
+    }
+    const original = Node.prototype[method];
+    Node.prototype[method] = function guardedNodeInsertion(node, referenceNode) {
+      if (node instanceof Element && isGuardedMediaElement(node)) {
+        const tag = node.tagName.toLowerCase();
+        const src = node.getAttribute("src") || node.src || "";
+        if (shouldDenyDynamicElementUrl(activeProfile, tag, src)) {
+          neutralizeDynamicElement(activeProfile, node, tag, src, method);
+          return node;
+        }
+      }
+      return method === "insertBefore"
+        ? original.call(this, node, referenceNode)
+        : original.call(this, node);
+    };
   }
 
   function patchFetch(activeProfile) {
@@ -469,7 +569,7 @@
   }
 
   function isBlockedBlankPopup(activeProfile, url) {
-    if (detectPageType(activeProfile) !== "chapter") {
+    if (!isChapterContext(activeProfile)) {
       return false;
     }
     const rawUrl = String(url == null ? "" : url).trim();
@@ -477,8 +577,7 @@
   }
 
   function shouldBlockWindowOpen(activeProfile, url) {
-    const pageType = detectPageType(activeProfile);
-    if (pageType !== "chapter") {
+    if (!isChapterContext(activeProfile)) {
       return isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url);
     }
 
@@ -496,10 +595,8 @@
       return false;
     }
 
-    let parsed;
-    try {
-      parsed = new URL(String(url || ""), location.href);
-    } catch (error) {
+    const parsed = parseUrl(url);
+    if (!parsed) {
       return false;
     }
     if (!profiles.profileMatchesHostname(activeProfile, parsed.hostname)) {
@@ -524,12 +621,52 @@
     return isFloaterUrl(url) || isAffiliateNavigationUrl(activeProfile, url);
   }
 
+  function isGuardedMediaElement(node) {
+    return node instanceof Element && (node.tagName === "SCRIPT" || node.tagName === "IFRAME");
+  }
+
+  function shouldDenyDynamicElementUrl(activeProfile, tag, url) {
+    const rawUrl = String(url || "").trim();
+    if (!rawUrl) {
+      return false;
+    }
+    const host = getUrlHost(rawUrl);
+    if (!host) {
+      return false;
+    }
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
+      || activeProfile.pageRules && activeProfile.pageRules.chapter
+      || {};
+    const deniedHosts = (rules.dynamicElementDenyHosts || []).concat(rules.offsiteNavigationDenyHosts || []);
+    return deniedHosts.some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost))
+      || isFloaterUrl(rawUrl)
+      || isAffiliateNavigationUrl(activeProfile, rawUrl);
+  }
+
+  function neutralizeDynamicElement(activeProfile, node, tag, url, source) {
+    try {
+      if (tag === "script") {
+        node.type = "text/plain";
+      }
+      node.removeAttribute("src");
+      node.setAttribute("data-site-shield-dynamic-denied", "true");
+      if (tag === "iframe") {
+        node.setAttribute("src", "about:blank");
+      }
+    } catch (error) {
+      return;
+    }
+    dispatchDynamicSrcDenied(activeProfile, tag, url, source);
+  }
+
   function isAffiliateNavigationUrl(activeProfile, url) {
     const host = getUrlHost(url);
     if (!host) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)] || {};
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
+      || activeProfile.pageRules && activeProfile.pageRules.chapter
+      || {};
     return (rules.offsiteNavigationDenyHosts || []).some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost));
   }
 
@@ -538,7 +675,9 @@
     if (!host) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)] || {};
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
+      || activeProfile.pageRules && activeProfile.pageRules.chapter
+      || {};
     return (rules.offsiteNavigationAllowHosts || []).some((allowHost) => heuristics.isSubdomainOrSame(host, allowHost));
   }
 
@@ -557,7 +696,8 @@
       affiliateHost,
       offsite,
       sameOrigin,
-      popupDefaultDenied: source === "window_open" && detectPageType(activeProfile) === "chapter",
+      popupDefaultDenied: source === "window_open" && isChapterContext(activeProfile),
+      frameContext: window.top !== window,
       reason: blankPopup ? "blank_popup" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "popup_default_deny",
       rawArgs: [
         trimArg(url),
@@ -670,11 +810,8 @@
   }
 
   function getUrlHost(url) {
-    try {
-      return new URL(String(url || ""), location.href).hostname;
-    } catch (error) {
-      return "";
-    }
+    const parsed = parseUrl(url);
+    return parsed ? parsed.hostname : "";
   }
 
   function requestUrl(input) {
@@ -688,12 +825,23 @@
   }
 
   function isFloaterUrl(url) {
-    try {
-      const parsed = new URL(String(url || ""), location.href);
-      return parsed.hostname === "oundhertobeconsist.org" && /^\/floater(?:\/|$)/i.test(parsed.pathname);
-    } catch (error) {
-      return false;
-    }
+    const parsed = parseUrl(url);
+    return Boolean(parsed && parsed.hostname === "oundhertobeconsist.org" && /^\/floater(?:\/|$)/i.test(parsed.pathname));
+  }
+
+  function isChubbyGetUrl(url) {
+    const parsed = parseUrl(url);
+    return Boolean(parsed && parsed.hostname === "chubbyexemplaryhardiness.com" && /^\/get\/2090108(?:\/|$)/i.test(parsed.pathname));
+  }
+
+  function isChubbyOnJsUrl(url) {
+    const parsed = parseUrl(url);
+    return Boolean(parsed && parsed.hostname === "chubbyexemplaryhardiness.com" && parsed.pathname === "/on.js");
+  }
+
+  function isWithageConfigUrl(url) {
+    const parsed = parseUrl(url);
+    return Boolean(parsed && parsed.hostname === "withagecomeswisdom.live" && /^\/api\/ads\/get-info\/v2(?:\/|$)/i.test(parsed.pathname));
   }
 
   function dispatchRequestBlocked(activeProfile, source, url) {
@@ -706,9 +854,31 @@
         host: getUrlHost(url),
         floater: isFloaterUrl(url),
         affiliateHost: isAffiliateNavigationUrl(activeProfile, url),
+        chubbyGet: isChubbyGetUrl(url),
+        chubbyOnJs: isChubbyOnJsUrl(url),
+        withageConfig: isWithageConfigUrl(url),
+        frameContext: window.top !== window,
         clickCount: shieldState.clickCount,
         clickSerial: shieldState.clickSerial,
         afterMutationBurst: isAfterMutationBurst(activeProfile)
+      }
+    }));
+  }
+
+  function dispatchDynamicSrcDenied(activeProfile, tag, url, source) {
+    window.dispatchEvent(new CustomEvent("site-shield-dynamic-src-blocked", {
+      detail: {
+        profileId: activeProfile.id,
+        action: "block",
+        source,
+        tag,
+        url: String(url || ""),
+        host: getUrlHost(url),
+        chubbyGet: isChubbyGetUrl(url),
+        chubbyOnJs: isChubbyOnJsUrl(url),
+        withageConfig: isWithageConfigUrl(url),
+        frameContext: window.top !== window,
+        pageType: detectPageType(activeProfile)
       }
     }));
   }
@@ -728,7 +898,10 @@
       return true;
     }
     try {
-      const parsed = new URL(rawUrl, location.href);
+      const parsed = parseUrl(rawUrl);
+      if (!parsed) {
+        return false;
+      }
       if (heuristics.isSuspiciousHost(activeProfile, parsed.hostname, [])) {
         return true;
       }
@@ -749,7 +922,10 @@
       return false;
     }
     try {
-      const parsed = new URL(rawUrl, location.href);
+      const parsed = parseUrl(rawUrl);
+      if (!parsed) {
+        return false;
+      }
       return heuristics.isCandidateHost(activeProfile, parsed.hostname);
     } catch (error) {
       return false;
@@ -765,9 +941,8 @@
 
     const rawUrl = String(url || "");
     let parsed;
-    try {
-      parsed = new URL(rawUrl, location.href);
-    } catch (error) {
+    parsed = parseUrl(rawUrl);
+    if (!parsed) {
       return false;
     }
 
@@ -781,12 +956,13 @@
   }
 
   function detectPageType(activeProfile) {
+    const pathname = resolveContextPathname();
     for (const [pageType, rule] of Object.entries(activeProfile.pageTypes || {})) {
       if (!rule || !rule.pathRegex) {
         continue;
       }
       try {
-        if (new RegExp(rule.pathRegex, "i").test(location.pathname)) {
+        if (new RegExp(rule.pathRegex, "i").test(pathname)) {
           return pageType;
         }
       } catch (error) {
@@ -794,6 +970,60 @@
       }
     }
     return "unknown";
+  }
+
+  function isChapterContext(activeProfile) {
+    return detectPageType(activeProfile) === "chapter";
+  }
+
+  function resolveContextHostname() {
+    if (location.hostname) {
+      return location.hostname;
+    }
+    for (const candidateWindow of [window.parent, window.top]) {
+      try {
+        if (candidateWindow && candidateWindow.location && candidateWindow.location.hostname) {
+          return candidateWindow.location.hostname;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    try {
+      return new URL(document.referrer || "").hostname;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function resolveContextPathname() {
+    if (location.hostname && location.pathname) {
+      return location.pathname;
+    }
+    for (const candidateWindow of [window.parent, window.top]) {
+      try {
+        if (candidateWindow && candidateWindow.location && candidateWindow.location.pathname) {
+          return candidateWindow.location.pathname;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    try {
+      return new URL(document.referrer || "").pathname;
+    } catch (error) {
+      return location.pathname || "";
+    }
+  }
+
+  function parseUrl(url) {
+    try {
+      const rawUrl = String(url || "");
+      const normalized = rawUrl.startsWith("//") ? "https:" + rawUrl : rawUrl;
+      return new URL(normalized, location.href);
+    } catch (error) {
+      return null;
+    }
   }
 
   function urlHasRedirectTerm(url, terms) {

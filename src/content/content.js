@@ -4,7 +4,7 @@
   const config = globalThis.SiteShieldConfig;
   const profiles = globalThis.SiteShieldProfiles;
   const heuristics = globalThis.SiteShieldHeuristics;
-  const host = location.hostname;
+  const host = resolveFrameHostname();
   const DOM_PROCESS_DELAY_MS = 250;
   const MAX_PENDING_ROOTS = 40;
   const MAX_NODES_PER_PASS = 350;
@@ -72,6 +72,12 @@
       blankPopupStubReturned: 0,
       offsitePopupStubReturned: 0,
       popupReuseAttemptBlocked: 0,
+      chubbyGetBlocked: 0,
+      chubbyOnJsBlocked: 0,
+      withageConfigBlocked: 0,
+      badScriptSrcDenied: 0,
+      badIframeSrcDenied: 0,
+      frameContextPopupBlocked: 0,
       cloudfrontLoaderBlocked: 0,
       chubbyLoaderBlocked: 0,
       centeredPopupIframeRemoved: 0,
@@ -187,12 +193,20 @@
     });
     window.addEventListener("site-shield-floater-blocked", (event) => {
       incrementStats({ blockedRedirects: 1 });
-      addPerfDelta(Object.assign({}, floaterPerfDelta(event.detail), finalBypassPerfDelta(event.detail)));
+      addPerfDelta(Object.assign({}, floaterPerfDelta(event.detail), finalBypassPerfDelta(event.detail), primaryHostPerfDelta(event.detail)));
       recordEvent(config.EVENT_CATEGORIES.NETWORK, event.detail && event.detail.floater ? "Floater request blocked" : "Affiliate request blocked", Object.assign({
         action: "block",
         pageType: state.pageType
       }, event.detail || {}));
       debugLog("floater-blocked", event.detail || {});
+    });
+    window.addEventListener("site-shield-dynamic-src-blocked", (event) => {
+      addPerfDelta(dynamicSrcPerfDelta(event.detail));
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Dynamic script/frame source denied", Object.assign({
+        action: "block",
+        pageType: state.pageType
+      }, event.detail || {}));
+      debugLog("dynamic-src-blocked", event.detail || {});
     });
   }
 
@@ -227,7 +241,32 @@
       popupOpenBlocked: source === "window_open" ? 1 : 0,
       blankPopupStubReturned: source === "window_open" && detail.blankPopup && detail.fakePopupReturned ? 1 : 0,
       offsitePopupStubReturned: source === "window_open" && detail.offsite && detail.fakePopupReturned ? 1 : 0,
-      popupReuseAttemptBlocked: source === "window_open" && detail.fakePopupReturned ? 1 : 0
+      popupReuseAttemptBlocked: source === "window_open" && detail.fakePopupReturned ? 1 : 0,
+      frameContextPopupBlocked: source === "window_open" && detail.frameContext ? 1 : 0
+    };
+  }
+
+  function dynamicSrcPerfDelta(detail) {
+    if (!detail) {
+      return {};
+    }
+    return {
+      chubbyGetBlocked: detail.chubbyGet ? 1 : 0,
+      chubbyOnJsBlocked: detail.chubbyOnJs ? 1 : 0,
+      withageConfigBlocked: detail.withageConfig ? 1 : 0,
+      badScriptSrcDenied: detail.tag === "script" ? 1 : 0,
+      badIframeSrcDenied: detail.tag === "iframe" ? 1 : 0
+    };
+  }
+
+  function primaryHostPerfDelta(detail) {
+    if (!detail) {
+      return {};
+    }
+    return {
+      chubbyGetBlocked: detail.chubbyGet ? 1 : 0,
+      chubbyOnJsBlocked: detail.chubbyOnJs ? 1 : 0,
+      withageConfigBlocked: detail.withageConfig ? 1 : 0
     };
   }
 
@@ -2092,6 +2131,12 @@
         blankPopupStubReturned: 0,
         offsitePopupStubReturned: 0,
         popupReuseAttemptBlocked: 0,
+        chubbyGetBlocked: 0,
+        chubbyOnJsBlocked: 0,
+        withageConfigBlocked: 0,
+        badScriptSrcDenied: 0,
+        badIframeSrcDenied: 0,
+        frameContextPopupBlocked: 0,
         cloudfrontLoaderBlocked: 0,
         chubbyLoaderBlocked: 0,
         centeredPopupIframeRemoved: 0,
@@ -2289,13 +2334,14 @@
   }
 
   function detectPageType(profile) {
+    const pathname = resolveFramePathname();
     const pageTypes = profile && profile.pageTypes || {};
     for (const [pageType, rule] of Object.entries(pageTypes)) {
       if (!rule || !rule.pathRegex) {
         continue;
       }
       try {
-        if (new RegExp(rule.pathRegex, "i").test(location.pathname)) {
+        if (new RegExp(rule.pathRegex, "i").test(pathname)) {
           return pageType;
         }
       } catch (error) {
@@ -2303,5 +2349,45 @@
       }
     }
     return "unknown";
+  }
+
+  function resolveFrameHostname() {
+    if (location.hostname) {
+      return location.hostname;
+    }
+    for (const candidateWindow of [window.parent, window.top]) {
+      try {
+        if (candidateWindow && candidateWindow.location && candidateWindow.location.hostname) {
+          return candidateWindow.location.hostname;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    try {
+      return new URL(document.referrer || "").hostname;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function resolveFramePathname() {
+    if (location.hostname && location.pathname) {
+      return location.pathname;
+    }
+    for (const candidateWindow of [window.parent, window.top]) {
+      try {
+        if (candidateWindow && candidateWindow.location && candidateWindow.location.pathname) {
+          return candidateWindow.location.pathname;
+        }
+      } catch (error) {
+        continue;
+      }
+    }
+    try {
+      return new URL(document.referrer || "").pathname;
+    } catch (error) {
+      return location.pathname || "";
+    }
   }
 })();

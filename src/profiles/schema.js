@@ -137,6 +137,7 @@
         offsiteNavigationDenyHosts: normalizeHostList(rules && rules.offsiteNavigationDenyHosts || []),
         offsiteNavigationAllowHosts: normalizeHostList(rules && rules.offsiteNavigationAllowHosts || []),
         affiliateHintHosts: normalizeHostList(rules && rules.affiliateHintHosts || []),
+        dynamicElementDenyHosts: normalizeHostList(rules && rules.dynamicElementDenyHosts || []),
         popupPromoTextTerms: normalizeList(rules && rules.popupPromoTextTerms || []),
         removalContainerSelectors: normalizeList(rules && rules.removalContainerSelectors || []),
         maxAnchorScansPerPass: Number(rules && rules.maxAnchorScansPerPass || 80),

@@ -332,6 +332,18 @@
       + " blank stubs, "
       + String(perf.popupReuseAttemptBlocked || 0)
       + " popup reuse blocked, "
+      + String(perf.chubbyGetBlocked || 0)
+      + " chubby get, "
+      + String(perf.chubbyOnJsBlocked || 0)
+      + " chubby on.js, "
+      + String(perf.withageConfigBlocked || 0)
+      + " withage config, "
+      + String(perf.badScriptSrcDenied || 0)
+      + " script src denied, "
+      + String(perf.badIframeSrcDenied || 0)
+      + " iframe src denied, "
+      + String(perf.frameContextPopupBlocked || 0)
+      + " frame popups, "
       + String(perf.affiliateHostBlocked || 0)
       + " affiliate hits, "
       + String(perf.cloudfrontLoaderBlocked || 0)

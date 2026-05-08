@@ -157,6 +157,11 @@ The final affiliate-tab bypass is handled with a chapter-page default-deny polic
 - Affiliate/popunder hosts are denied in the page guard: `clicks.pipaffiliates.com`, `oundhertobeconsist.org`, `weiledsteverm.org`, `ghabovethec.info`, `chubbyexemplaryhardiness.com`, `xm.com`, and direct `shopee.co.th` affiliate opens.
 - Resource hints such as `preconnect` and `dns-prefetch` to those affiliate hosts are removed on chapter pages.
 - DNR rule `11` is a host-level script block for `d2dxy39sqorbhv.cloudfront.net`, covering the protocol-relative `//d2dxy39sqorbhv.cloudfront.net/?syxdd=1257018` loader without depending on the query suffix.
+- DNR rule `12` blocks the remaining `chubbyexemplaryhardiness.com` chain across `main_frame`, `sub_frame`, `script`, `xmlhttprequest`, `ping`, and `other`, including `/get/2090108` and `/on.js`.
+- DNR rule `13` blocks the ad-stack config endpoint `withagecomeswisdom.live/api/ads/get-info/v2`.
+- DNR rule `14` blocks top-level navigation to `||chubbyexemplaryhardiness.com/get/2090108` even if a popup loses its Mangakakalot initiator.
+- The MAIN-world page guard also denies dynamic `script` and `iframe` source insertion for `chubbyexemplaryhardiness.com`, `oundhertobeconsist.org`, `withagecomeswisdom.live`, and `d2dxy39sqorbhv.cloudfront.net` through `createElement`, `setAttribute("src", ...)`, `script.src`, `iframe.src`, `appendChild`, and `insertBefore`.
+- Runtime content scripts are registered with `allFrames: true` and `matchOriginAsFallback: true`, so same-origin and inherited-origin frames created from Mangakakalot receive the same popup and dynamic-source guards.
 
 ## Runtime Model
 
