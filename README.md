@@ -112,6 +112,8 @@ Chapter orphan cleanup also removes bounded leftover ad UI such as isolated clos
 
 Footer/bottom junk is handled by targeted chapter anchor scans for confirmed junk domains and keywords before the generic bounded anchor scan runs. This helps remove late-page spam groups such as `sunwin28.bz`, OPEN88/Fun88 variants, and `hi88s.com` without repeatedly scanning the full document.
 
+The chapter profile has a dedicated popup-layer remover for `content notification` / `CANCEL` style blockers. It looks for notification/dialog nodes, climbs only a few ancestors to find the small popup container, hides it, and then neutralizes likely fixed-position backdrops around it. A throttled scroll/timer check repeats this narrow popup scan so mutation-, scroll-, or timer-triggered reinsertions are removed again without rerunning the full DOM cleanup.
+
 ## Runtime Model
 
 - Known profile: a profile module exists in `src/profiles/sites/` and is present in the registry.
@@ -199,7 +201,7 @@ Debug has three practical safety levels:
 - Basic debug: records important blocked actions only.
 - Inspection: records observe-only candidate matches, but DOM work is throttled and events are buffered, coalesced, rate-limited, trimmed, and capped.
 
-The popup perf line reports DOM passes, skipped passes, shielded clicks, blocked opens, orphan UI removed, footer groups removed, dropped events, coalesced events, and storage flushes. If these climb quickly while browsing, turn inspection mode off and promote only rules that already have repeated evidence.
+The popup perf line reports DOM passes, skipped passes, shielded clicks, blocked opens, orphan UI removed, footer groups removed, popup layers removed, rearmed attempts blocked, dropped events, coalesced events, and storage flushes. If these climb quickly while browsing, turn inspection mode off and promote only rules that already have repeated evidence.
 
 ## Mangakakalot Tuning Workflow
 

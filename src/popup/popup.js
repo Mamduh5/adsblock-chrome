@@ -302,6 +302,10 @@
       + " orphan UI removed, "
       + String(perf.footerJunkGroupsRemoved || 0)
       + " footer groups removed, "
+      + String(perf.popupLayersRemoved || 0)
+      + " popups removed, "
+      + String(perf.rearmedHijackAttemptsBlocked || 0)
+      + " rearmed blocked, "
       + String(perf.eventsDropped || 0)
       + " dropped, "
       + String(perf.eventsCoalesced || 0)

@@ -298,6 +298,24 @@
           "sponsored",
           "content notification"
         ],
+        popupLayerSelectors: [
+          "[class*='content-notification' i]",
+          "[id*='content-notification' i]",
+          "[class*='notification' i]",
+          "[id*='notification' i]",
+          "[role='dialog']",
+          "[aria-modal='true']"
+        ],
+        popupBackdropSelectors: [
+          "[class*='overlay' i]",
+          "[id*='overlay' i]",
+          "[class*='backdrop' i]",
+          "[id*='backdrop' i]",
+          "[class*='modal' i]",
+          "[id*='modal' i]",
+          "[style*='position: fixed' i]",
+          "[style*='position:fixed' i]"
+        ],
         removalContainerSelectors: [
           "p",
           "li",
@@ -308,6 +326,7 @@
         maxAnchorScansPerPass: 100,
         maxOverlayScansPerPass: 80,
         maxOrphanScansPerPass: 70,
+        maxPopupScansPerPass: 35,
         readerRectCacheMs: 3000,
         overlayMinViewportWidthRatio: 0.72,
         overlayMinViewportHeightRatio: 0.4,

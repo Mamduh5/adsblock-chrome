@@ -25,6 +25,7 @@
     pendingRoots: new Set(),
     pendingFullScan: false,
     cleanupTimer: null,
+    popupCheckTimer: null,
     observer: null,
     cleanupQueued: false,
     readerCacheAt: 0,
@@ -39,6 +40,10 @@
       duplicateOpenAttemptsBlocked: 0,
       orphanJunkRemoved: 0,
       footerJunkGroupsRemoved: 0,
+      popupLayersRemoved: 0,
+      popupLayersReremoved: 0,
+      orphanXRemoved: 0,
+      rearmedHijackAttemptsBlocked: 0,
       expensiveScansSkipped: 0
     },
     perfTimer: null,
@@ -74,6 +79,7 @@
     tryScrubStorage("sessionStorage");
     installClickInterceptor();
     installMutationObserver();
+    installChapterRearmWatchers();
     queueCleanup(document.documentElement, true);
   }
 
@@ -93,14 +99,18 @@
       incrementStats({ blockedRedirects: 1 });
       addPerfDelta({
         opensBlocked: 1,
-        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0
+        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
       });
       recordEvent(config.EVENT_CATEGORIES.OPEN, "window.open blocked", Object.assign({ action: "block" }, event.detail || {}));
       debugLog("window-open-blocked", event.detail || {});
     });
     window.addEventListener("site-shield-click-shielded", (event) => {
       incrementStats({ blockedRedirects: 1 });
-      addPerfDelta({ clicksShielded: 1 });
+      addPerfDelta({
+        clicksShielded: 1,
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
+      });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Chapter click shield blocked handler path", Object.assign({
         action: "block",
         pageType: state.pageType
@@ -111,7 +121,8 @@
       incrementStats({ blockedRedirects: 1 });
       addPerfDelta({
         opensBlocked: 1,
-        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0
+        duplicateOpenAttemptsBlocked: event.detail && event.detail.duplicateAttempt ? 1 : 0,
+        rearmedHijackAttemptsBlocked: event.detail && event.detail.afterMutationBurst ? 1 : 0
       });
       recordEvent(config.EVENT_CATEGORIES.CLICK, "Location redirect blocked during guarded click", Object.assign({
         action: "block",
@@ -227,14 +238,16 @@
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
           for (const node of mutation.addedNodes) {
-            if (node instanceof Element) {
+            if (node instanceof Element && isRelevantMutationNode(node)) {
               queueCleanup(node, false);
               queued = true;
             }
           }
         } else if (mutation.target instanceof Element) {
-          queueCleanup(mutation.target, false);
-          queued = true;
+          if (isRelevantMutationNode(mutation.target)) {
+            queueCleanup(mutation.target, false);
+            queued = true;
+          }
         }
       }
       if (!queued && mutations.length) {
@@ -242,6 +255,67 @@
       }
     });
     state.observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "class", "id", "src"] });
+  }
+
+  function installChapterRearmWatchers() {
+    if (state.pageType !== "chapter") {
+      return;
+    }
+    window.addEventListener("scroll", schedulePopupLayerCheck, { passive: true });
+    window.setTimeout(schedulePopupLayerCheck, 1200);
+    window.setTimeout(schedulePopupLayerCheck, 3500);
+  }
+
+  function schedulePopupLayerCheck() {
+    if (state.popupCheckTimer || state.pageType !== "chapter") {
+      return;
+    }
+    state.popupCheckTimer = window.setTimeout(() => {
+      state.popupCheckTimer = null;
+      const removed = removeChapterPopupLayers([document.documentElement]);
+      if (removed > 0) {
+        document.documentElement.classList.add("site-shield-scroll-unlocked");
+        incrementStats({ removedOverlays: removed });
+      }
+      flushPerfSoon();
+    }, 1500);
+  }
+
+  function isRelevantMutationNode(node) {
+    if (state.pageType !== "chapter") {
+      return true;
+    }
+    if (!(node instanceof Element)) {
+      return false;
+    }
+    if (looksRelevantChapterNode(node)) {
+      return true;
+    }
+    countSkippedDomPass();
+    return false;
+  }
+
+  function looksRelevantChapterNode(node) {
+    const name = String(node.id || "") + " " + String(node.className || "");
+    if (/ad|ads|advert|sponsor|popup|modal|overlay|backdrop|notification|notify|content-notification|footer|bottom/i.test(name)) {
+      return true;
+    }
+    const selector = [
+      "a[href]",
+      "iframe[src]",
+      "[onclick]",
+      "[role='dialog']",
+      "[aria-modal='true']",
+      "[class*='notification' i]",
+      "[id*='notification' i]",
+      "[class*='overlay' i]",
+      "[id*='overlay' i]"
+    ].join(",");
+    try {
+      return node.matches(selector) || Boolean(node.querySelector(selector));
+    } catch (error) {
+      return false;
+    }
   }
 
   function queueCleanup(root, forceFullScan) {
@@ -289,6 +363,7 @@
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
     if (state.pageType === "chapter") {
+      removed += removeChapterPopupLayers(roots);
       removed += removeChapterJunk(roots);
       removed += neutralizeChapterClickTraps(roots);
       removed += removeChapterOrphanJunk(roots);
@@ -515,6 +590,147 @@
     return results;
   }
 
+  function removeChapterPopupLayers(roots) {
+    const rules = state.pageRules || {};
+    const limit = Number(rules.maxPopupScansPerPass || 40);
+    const selector = popupLayerSelector(rules);
+    const candidates = uniqueElements(
+      queryWithinRoots(roots, selector, limit)
+        .concat(queryWithinRoots(roots, "button, a, [role='button']", Math.min(20, limit)))
+    );
+    let removed = 0;
+    let reremoved = 0;
+
+    for (const node of candidates) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node)) {
+        continue;
+      }
+      if (!isChapterPopupLayerSignal(node)) {
+        continue;
+      }
+
+      const target = findChapterPopupLayerContainer(node);
+      if (!target || state.removedNodes.has(target) || isProtectedChapterNode(target)) {
+        continue;
+      }
+
+      const wasReremoved = Number(document.documentElement.dataset.siteShieldPopupRemoved || "0") > 0;
+      hideNode(target, "chapter-popup-layer", popupLayerDetails(target, node, wasReremoved));
+      document.documentElement.dataset.siteShieldPopupRemoved = String(Number(document.documentElement.dataset.siteShieldPopupRemoved || "0") + 1);
+      removed += 1;
+      reremoved += wasReremoved ? 1 : 0;
+      removed += neutralizePopupBackdrops(target, roots, wasReremoved);
+    }
+
+    if (removed > 0) {
+      addPerfDelta({
+        popupLayersRemoved: removed,
+        popupLayersReremoved: reremoved
+      });
+    }
+    return removed;
+  }
+
+  function popupLayerSelector(rules) {
+    const selectors = (rules.popupLayerSelectors || []).concat([
+      "[class*='content-notification' i]",
+      "[id*='content-notification' i]",
+      "[class*='notification' i]",
+      "[id*='notification' i]",
+      "[role='dialog']",
+      "[aria-modal='true']"
+    ]);
+    return heuristics.safeSelectorList(selectors).join(",") || "[role='dialog']";
+  }
+
+  function isChapterPopupLayerSignal(node) {
+    const text = trimText(node.textContent).toLowerCase();
+    if (text.includes("content notification") || /^cancel$/i.test(text)) {
+      return true;
+    }
+    if (looksAdNamed(node) && node.querySelector("button, a, [role='button']")) {
+      return true;
+    }
+    return false;
+  }
+
+  function findChapterPopupLayerContainer(node) {
+    let current = node;
+    let best = node;
+    let depth = 0;
+    while (current instanceof HTMLElement && current !== document.body && depth < 5) {
+      if (isProtectedChapterNode(current)) {
+        return best;
+      }
+      if (isLikelyPopupContainer(current)) {
+        best = current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return best;
+  }
+
+  function isLikelyPopupContainer(node) {
+    const text = trimText(node.textContent).toLowerCase();
+    if (text.length > 500 || node.querySelector("img, picture, canvas, video, select, form, textarea")) {
+      return false;
+    }
+    const style = getComputedStyle(node);
+    const rect = node.getBoundingClientRect();
+    const positioned = style.position === "fixed" || style.position === "absolute" || style.position === "sticky";
+    return text.includes("content notification")
+      || (text.includes("cancel") && looksAdNamed(node))
+      || (positioned && rect.width >= 160 && rect.height >= 60 && looksAdNamed(node));
+  }
+
+  function neutralizePopupBackdrops(container, roots, wasReremoved) {
+    const rules = state.pageRules || {};
+    const selector = heuristics.safeSelectorList(rules.popupBackdropSelectors || []).join(",");
+    if (!selector) {
+      return 0;
+    }
+    let removed = 0;
+    const candidates = queryWithinRoots(roots, selector, 20);
+    for (const node of candidates) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || node === container || container.contains(node)) {
+        continue;
+      }
+      if (!isPopupBackdrop(node)) {
+        continue;
+      }
+      hideNode(node, "chapter-popup-backdrop", popupLayerDetails(node, container, wasReremoved));
+      removed += 1;
+    }
+    return removed;
+  }
+
+  function isPopupBackdrop(node) {
+    const style = getComputedStyle(node);
+    if (style.pointerEvents === "none" || style.display === "none" || style.visibility === "hidden") {
+      return false;
+    }
+    const rect = node.getBoundingClientRect();
+    const viewportArea = Math.max(1, window.innerWidth * window.innerHeight);
+    const area = Math.max(0, rect.width) * Math.max(0, rect.height);
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    return (style.position === "fixed" || style.position === "absolute")
+      && (area / viewportArea >= 0.2 || (Number.isFinite(zIndex) && zIndex >= 10))
+      && !node.querySelector("img, picture, canvas, video, select, form, textarea");
+  }
+
+  function popupLayerDetails(node, triggerNode, wasReremoved) {
+    return {
+      action: "block",
+      pageType: state.pageType,
+      reason: wasReremoved ? "popup_layer_reinserted" : "popup_layer",
+      node: describeNode(node),
+      trigger: describeNode(triggerNode),
+      text: trimText(triggerNode.textContent),
+      rect: rectSummary(node.getBoundingClientRect())
+    };
+  }
+
   function neutralizeChapterClickTraps(roots) {
     const rules = state.pageRules || {};
     const candidates = queryWithinRoots(
@@ -589,6 +805,7 @@
       "button, a, span, p, div, small, label",
       Math.max(20, limit - removed)
     );
+    let orphanXRemoved = 0;
     for (const node of textCandidates) {
       if (removed >= limit) {
         break;
@@ -602,10 +819,16 @@
       }
       hideNode(node, "chapter-orphan-text:" + reason, orphanDetails(node, "text", reason));
       removed += 1;
+      if (reason === "close") {
+        orphanXRemoved += 1;
+      }
     }
 
     if (removed > 0) {
-      addPerfDelta({ orphanJunkRemoved: removed });
+      addPerfDelta({
+        orphanJunkRemoved: removed,
+        orphanXRemoved
+      });
     }
     return removed;
   }
@@ -621,7 +844,7 @@
     const rect = node.getBoundingClientRect();
     const hasAdName = looksAdNamed(node);
     const adLabel = (state.pageRules.orphanTextTerms || []).some((term) => text.toLowerCase() === String(term).toLowerCase());
-    const closeLabel = /^(x|×|close)$/i.test(text) && (hasAdName || (rect.width <= 64 && rect.height <= 64));
+    const closeLabel = /^(x|\u00d7|close)$/i.test(text) && (hasAdName || (rect.width <= 64 && rect.height <= 64));
     return text.length <= 80 && (hasAdName || adLabel || closeLabel);
   }
 
@@ -652,7 +875,7 @@
         return term;
       }
     }
-    if (/^(x|×|close)$/i.test(text)) {
+    if (/^(x|\u00d7|close)$/i.test(text)) {
       return "close";
     }
     return "";
@@ -1193,6 +1416,10 @@
         duplicateOpenAttemptsBlocked: 0,
         orphanJunkRemoved: 0,
         footerJunkGroupsRemoved: 0,
+        popupLayersRemoved: 0,
+        popupLayersReremoved: 0,
+        orphanXRemoved: 0,
+        rearmedHijackAttemptsBlocked: 0,
         expensiveScansSkipped: 0
       };
       if (Object.values(delta).some((value) => Number(value || 0) > 0)) {

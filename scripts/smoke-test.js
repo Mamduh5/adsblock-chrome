@@ -112,6 +112,8 @@ vm.runInContext(
   assert(profile.pageRules.chapter.clickAllowSelectors.length > 0, "chapter rules should include click allowlist");
   assert(profile.pageRules.chapter.readerSelectors.length > 0, "chapter rules should include reader selectors");
   assert(profile.pageRules.chapter.orphanSelectors.length > 0, "chapter rules should include orphan cleanup selectors");
+  assert(profile.pageRules.chapter.popupLayerSelectors.length > 0, "chapter rules should include popup layer selectors");
+  assert(profile.pageRules.chapter.popupBackdropSelectors.length > 0, "chapter rules should include popup backdrop selectors");
   assert.strictEqual(profile.pageRules.chapter.clickShieldEnabled, true, "chapter click shield should be enabled");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("pointerdown"), "chapter click shield should guard pointerdown");
   assert(profile.pageRules.chapter.clickShieldEvents.includes("mousedown"), "chapter click shield should guard mousedown");
