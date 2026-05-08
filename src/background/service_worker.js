@@ -96,7 +96,13 @@ const perfCounters = {
   stickyBannerRemoved: 0,
   sideBannerRemoved: 0,
   mainPlayerPreserved: 0,
-  watchPageDetected: 0
+  watchPageDetected: 0,
+  prerollBranchBypassed: 0,
+  mainPlayerForcedVisible: 0,
+  centerAffiliateBlockRemoved: 0,
+  adsContainerMainRemoved: 0,
+  sideSkyscraperRemoved: 0,
+  overlayReremoved: 0
 };
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -1080,7 +1086,13 @@ function mergePerfCounters(delta) {
     "stickyBannerRemoved",
     "sideBannerRemoved",
     "mainPlayerPreserved",
-    "watchPageDetected"
+    "watchPageDetected",
+    "prerollBranchBypassed",
+    "mainPlayerForcedVisible",
+    "centerAffiliateBlockRemoved",
+    "adsContainerMainRemoved",
+    "sideSkyscraperRemoved",
+    "overlayReremoved"
   ]) {
     perfCounters[key] += Number(delta[key] || 0);
   }

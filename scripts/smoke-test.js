@@ -117,9 +117,14 @@ vm.runInContext(
   assert(mamtpoProfile.pageTypes.watch, "Mamtpo profile should define watch page type");
   assert(mamtpoProfile.pageTypes.watch.domAnySelectors.includes("#asplayer"), "Mamtpo watch type should detect asplayer DOM");
   assert(mamtpoProfile.pageTypes.watch.domAnySelectors.includes("#main-player"), "Mamtpo watch type should detect main player DOM");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#asplayer"), "Mamtpo watch rules should bypass full preroll branch");
   assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#custom-promo-popup-overlay"), "Mamtpo watch rules should remove promo popup");
   assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#first-gate"), "Mamtpo watch rules should remove first gate");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes(".gate-wrapper"), "Mamtpo watch rules should remove gate wrapper");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#ad-overlay"), "Mamtpo watch rules should remove base ad overlay");
   assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#ad-overlay.click-overlay"), "Mamtpo watch rules should remove click overlay");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes(".ads-container-main"), "Mamtpo watch rules should remove main ad containers");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes(".ads-bottom-area"), "Mamtpo watch rules should remove bottom ad area");
   assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#sticky-banner-center"), "Mamtpo watch rules should remove sticky banner");
   assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes(".side-skyscraper"), "Mamtpo watch rules should remove side skyscrapers");
   assert(mamtpoProfile.pageRules.watch.protectedSelectors.includes("#main-player"), "Mamtpo watch rules should protect main player");
