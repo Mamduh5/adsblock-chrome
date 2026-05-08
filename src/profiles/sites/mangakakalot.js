@@ -37,7 +37,10 @@
       11,
       12,
       13,
-      14
+      14,
+      15,
+      16,
+      17
     ],
     hardBlockHosts: [
       "ad-maven.com",
@@ -81,6 +84,8 @@
       "cpm.pressize.com",
       "oundhertobeconsist.org",
       "chubbyexemplaryhardiness.com",
+      "weiledsteverm.org",
+      "ghabovethec.info",
       "d3jzhqnvnvdy34.cloudfront.net",
       "d2dxy39sqorbhv.cloudfront.net",
       "withagecomeswisdom.live"
@@ -420,6 +425,9 @@
           "https://withagecomeswisdom.live/api/ads/get-info/v2",
           "https://d2dxy39sqorbhv.cloudfront.net/"
         ],
+        blockedUrlTokens: [
+          "wbbcd=1246039"
+        ],
         firstPartyAdScriptPaths: [
           "/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js",
           "/js/ads/clck-adu-kklgg.js",
@@ -479,6 +487,8 @@
           "chubbyexemplaryhardiness.com",
           "oundhertobeconsist.org",
           "withagecomeswisdom.live",
+          "weiledsteverm.org",
+          "ghabovethec.info",
           "d2dxy39sqorbhv.cloudfront.net"
         ],
         popupBackdropSelectors: [

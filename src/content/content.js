@@ -75,6 +75,11 @@
       chubbyGetBlocked: 0,
       chubbyOnJsBlocked: 0,
       withageConfigBlocked: 0,
+      weiledstevermBlocked: 0,
+      wbbcdLoaderBlocked: 0,
+      openedProductChainBlocked: 0,
+      newWindowPixelBlocked: 0,
+      residualFramePopupBlocked: 0,
       badScriptSrcDenied: 0,
       badIframeSrcDenied: 0,
       frameContextPopupBlocked: 0,
@@ -233,6 +238,7 @@
     const source = String(detail.source || "");
     const host = String(detail.host || heuristics.getUrlHostname(detail.url || "", location.href) || "").toLowerCase();
     const affiliateHost = Boolean(detail.affiliateHost || isAffiliateHintHost(host));
+    const openedProductChain = Boolean(detail.openedProductChain || detail.weiledsteverm || detail.wbbcdLoader);
     return {
       offsiteBlankPopupBlocked: detail.blankPopup ? 1 : 0,
       offsiteWindowOpenBlocked: source === "window_open" && (detail.offsite || affiliateHost || detail.blankPopup) ? 1 : 0,
@@ -242,7 +248,12 @@
       blankPopupStubReturned: source === "window_open" && detail.blankPopup && detail.fakePopupReturned ? 1 : 0,
       offsitePopupStubReturned: source === "window_open" && detail.offsite && detail.fakePopupReturned ? 1 : 0,
       popupReuseAttemptBlocked: source === "window_open" && detail.fakePopupReturned ? 1 : 0,
-      frameContextPopupBlocked: source === "window_open" && detail.frameContext ? 1 : 0
+      frameContextPopupBlocked: source === "window_open" && detail.frameContext ? 1 : 0,
+      weiledstevermBlocked: detail.weiledsteverm || host === "weiledsteverm.org" ? 1 : 0,
+      wbbcdLoaderBlocked: detail.wbbcdLoader || isWbbcdLoaderUrl(detail.url) ? 1 : 0,
+      openedProductChainBlocked: openedProductChain ? 1 : 0,
+      newWindowPixelBlocked: detail.newWindowPixel ? 1 : 0,
+      residualFramePopupBlocked: source === "window_open" && detail.frameContext ? 1 : 0
     };
   }
 
@@ -254,6 +265,9 @@
       chubbyGetBlocked: detail.chubbyGet ? 1 : 0,
       chubbyOnJsBlocked: detail.chubbyOnJs ? 1 : 0,
       withageConfigBlocked: detail.withageConfig ? 1 : 0,
+      weiledstevermBlocked: detail.weiledsteverm ? 1 : 0,
+      wbbcdLoaderBlocked: detail.wbbcdLoader ? 1 : 0,
+      openedProductChainBlocked: detail.openedProductChain ? 1 : 0,
       badScriptSrcDenied: detail.tag === "script" ? 1 : 0,
       badIframeSrcDenied: detail.tag === "iframe" ? 1 : 0
     };
@@ -266,7 +280,11 @@
     return {
       chubbyGetBlocked: detail.chubbyGet ? 1 : 0,
       chubbyOnJsBlocked: detail.chubbyOnJs ? 1 : 0,
-      withageConfigBlocked: detail.withageConfig ? 1 : 0
+      withageConfigBlocked: detail.withageConfig ? 1 : 0,
+      weiledstevermBlocked: detail.weiledsteverm ? 1 : 0,
+      wbbcdLoaderBlocked: detail.wbbcdLoader ? 1 : 0,
+      openedProductChainBlocked: detail.openedProductChain ? 1 : 0,
+      newWindowPixelBlocked: detail.newWindowPixel ? 1 : 0
     };
   }
 
@@ -274,6 +292,19 @@
     try {
       const parsed = new URL(String(url || ""), location.href);
       return parsed.hostname === "oundhertobeconsist.org" && /^\/floater(?:\/|$)/i.test(parsed.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function isWbbcdLoaderUrl(url) {
+    try {
+      const parsed = new URL(String(url || ""), location.href);
+      if (parsed.searchParams.get("wbbcd") === "1246039") {
+        return true;
+      }
+      const rawUrl = String(url || "").toLowerCase();
+      return (state.pageRules.blockedUrlTokens || []).some((token) => rawUrl.includes(String(token || "").toLowerCase()));
     } catch (error) {
       return false;
     }
@@ -628,6 +659,8 @@
     let admavenOrClck = 0;
     let cloudfront = 0;
     let chubby = 0;
+    let wbbcd = 0;
+    let weiled = 0;
     for (const script of scripts) {
       if (!(script instanceof HTMLScriptElement) || state.removedNodes.has(script)) {
         continue;
@@ -648,6 +681,8 @@
       admavenOrClck += /\/js\/ads\/(admaven|clck-adu-kklgg)\.js/i.test(src) ? 1 : 0;
       cloudfront += /:\/\/d2dxy39sqorbhv\.cloudfront\.net\//i.test(src) ? 1 : 0;
       chubby += /:\/\/chubbyexemplaryhardiness\.com\/(on\.js|get\/2090108)/i.test(src) ? 1 : 0;
+      wbbcd += isWbbcdLoaderUrl(src) ? 1 : 0;
+      weiled += /:\/\/weiledsteverm\.org\//i.test(src) ? 1 : 0;
     }
     if (removed > 0) {
       addPerfDelta({
@@ -655,7 +690,10 @@
         blockedFirstPartyAdLoader: firstParty,
         admavenOrClckLoaderBlocked: admavenOrClck,
         cloudfrontLoaderBlocked: cloudfront,
-        chubbyLoaderBlocked: chubby
+        chubbyLoaderBlocked: chubby,
+        wbbcdLoaderBlocked: wbbcd,
+        weiledstevermBlocked: weiled,
+        openedProductChainBlocked: wbbcd + weiled
       });
     }
     return removed;
@@ -703,6 +741,9 @@
       } catch (error) {
         debugLog("invalid-ad-script-url", { exactUrl });
       }
+    }
+    if (isWbbcdLoaderUrl(parsed.href)) {
+      return "wbbcd_loader";
     }
     if (profiles.profileMatchesHostname(state.profile, parsed.hostname)) {
       for (const path of state.pageRules.firstPartyAdScriptPaths || []) {
@@ -2134,6 +2175,11 @@
         chubbyGetBlocked: 0,
         chubbyOnJsBlocked: 0,
         withageConfigBlocked: 0,
+        weiledstevermBlocked: 0,
+        wbbcdLoaderBlocked: 0,
+        openedProductChainBlocked: 0,
+        newWindowPixelBlocked: 0,
+        residualFramePopupBlocked: 0,
         badScriptSrcDenied: 0,
         badIframeSrcDenied: 0,
         frameContextPopupBlocked: 0,
@@ -2321,7 +2367,7 @@
   }
 
   function isChapterJunkUrl(url) {
-    return state.pageType === "chapter" && Boolean(chapterJunkTrigger(url, ""));
+    return state.pageType === "chapter" && (Boolean(chapterJunkTrigger(url, "")) || isWbbcdLoaderUrl(url));
   }
 
   function isAffiliateHintHost(hostname) {

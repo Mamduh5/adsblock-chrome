@@ -127,6 +127,7 @@
         exactFullscreenOverlaySelectors: normalizeList(rules && rules.exactFullscreenOverlaySelectors || []),
         brokenIframeSelectors: normalizeList(rules && rules.brokenIframeSelectors || []),
         adBootstrapScriptUrls: normalizeList(rules && rules.adBootstrapScriptUrls || []),
+        blockedUrlTokens: normalizeList(rules && rules.blockedUrlTokens || []),
         firstPartyAdScriptPaths: normalizeList(rules && rules.firstPartyAdScriptPaths || []),
         adContainerSelectors: normalizeList(rules && rules.adContainerSelectors || []),
         readerInjectedAdSelectors: normalizeList(rules && rules.readerInjectedAdSelectors || []),

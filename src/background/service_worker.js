@@ -72,6 +72,11 @@ const perfCounters = {
   chubbyGetBlocked: 0,
   chubbyOnJsBlocked: 0,
   withageConfigBlocked: 0,
+  weiledstevermBlocked: 0,
+  wbbcdLoaderBlocked: 0,
+  openedProductChainBlocked: 0,
+  newWindowPixelBlocked: 0,
+  residualFramePopupBlocked: 0,
   badScriptSrcDenied: 0,
   badIframeSrcDenied: 0,
   frameContextPopupBlocked: 0,
@@ -138,6 +143,17 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
       });
     } else if (event.rule.ruleId === 13) {
       mergePerfCounters({ withageConfigBlocked: 1 });
+    } else if (event.rule.ruleId === 15 || event.rule.ruleId === 17) {
+      mergePerfCounters({
+        weiledstevermBlocked: 1,
+        openedProductChainBlocked: 1,
+        newWindowPixelBlocked: event.request.type === "xmlhttprequest" || event.request.type === "ping" ? 1 : 0
+      });
+    } else if (event.rule.ruleId === 16) {
+      mergePerfCounters({
+        wbbcdLoaderBlocked: 1,
+        openedProductChainBlocked: 1
+      });
     }
     recordEvent(profile.id, config.EVENT_CATEGORIES.NETWORK, "Request blocked", {
       action: "block",
@@ -1033,6 +1049,11 @@ function mergePerfCounters(delta) {
     "chubbyGetBlocked",
     "chubbyOnJsBlocked",
     "withageConfigBlocked",
+    "weiledstevermBlocked",
+    "wbbcdLoaderBlocked",
+    "openedProductChainBlocked",
+    "newWindowPixelBlocked",
+    "residualFramePopupBlocked",
     "badScriptSrcDenied",
     "badIframeSrcDenied",
     "frameContextPopupBlocked",
@@ -1167,7 +1188,7 @@ function getSenderHost(sender) {
 }
 
 function profileForGlobalStaticRule(ruleId) {
-  return ruleId === 14 ? profiles.getById("mangakakalot") : null;
+  return ruleId === 14 || ruleId === 17 ? profiles.getById("mangakakalot") : null;
 }
 
 function requestPathname(url) {

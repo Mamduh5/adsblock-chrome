@@ -118,10 +118,16 @@ vm.runInContext(
   assert(profile.staticRuleIds.includes(12), "profile should own comprehensive chubby host DNR rule");
   assert(profile.staticRuleIds.includes(13), "profile should own withage config DNR rule");
   assert(profile.staticRuleIds.includes(14), "profile should own global chubby get top-level DNR rule");
+  assert(profile.staticRuleIds.includes(15), "profile should own comprehensive weiledsteverm DNR rule");
+  assert(profile.staticRuleIds.includes(16), "profile should own wbbcd loader DNR rule");
+  assert(profile.staticRuleIds.includes(17), "profile should own global weiledsteverm top-level DNR rule");
   assert(staticRules.some((rule) => rule.id === 11 && rule.condition.requestDomains.includes("d2dxy39sqorbhv.cloudfront.net")), "static DNR should include host-level CloudFront syxdd loader rule");
   assert(staticRules.some((rule) => rule.id === 12 && rule.condition.requestDomains.includes("chubbyexemplaryhardiness.com") && rule.condition.resourceTypes.includes("main_frame")), "static DNR should include broad chubby chain rule");
   assert(staticRules.some((rule) => rule.id === 13 && rule.condition.regexFilter.includes("withagecomeswisdom")), "static DNR should include withage config rule");
   assert(staticRules.some((rule) => rule.id === 14 && rule.condition.urlFilter.includes("chubbyexemplaryhardiness.com/get/2090108")), "static DNR should include top-level chubby get rule");
+  assert(staticRules.some((rule) => rule.id === 15 && rule.condition.requestDomains.includes("weiledsteverm.org") && rule.condition.resourceTypes.includes("main_frame")), "static DNR should include broad weiledsteverm chain rule");
+  assert(staticRules.some((rule) => rule.id === 16 && rule.condition.regexFilter.includes("wbbcd=1246039")), "static DNR should include wbbcd loader rule");
+  assert(staticRules.some((rule) => rule.id === 17 && rule.condition.urlFilter.includes("weiledsteverm.org")), "static DNR should include top-level weiledsteverm rule");
   assert(profile.exactCookieNames.includes("__PPU_SESSION_1_2090108"), "profile should include exact popunder budget cookie");
   assert(profile.pageRules.chapter.hardHostKeywords.includes("open88"), "chapter rules should include OPEN88 keyword");
   assert(profile.pageRules.chapter.overlayAllowSelectors.length > 0, "chapter rules should include overlay allowlist");
@@ -149,6 +155,9 @@ vm.runInContext(
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("xm.com"), "chapter rules should deny direct XM affiliate opens");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("chubbyexemplaryhardiness.com"), "chapter rules should deny chubby popup opens");
   assert(profile.pageRules.chapter.dynamicElementDenyHosts.includes("withagecomeswisdom.live"), "chapter rules should deny dynamic withage script/frame insertion");
+  assert(profile.pageRules.chapter.dynamicElementDenyHosts.includes("weiledsteverm.org"), "chapter rules should deny dynamic weiledsteverm script/frame insertion");
+  assert(profile.pageRules.chapter.dynamicElementDenyHosts.includes("ghabovethec.info"), "chapter rules should deny dynamic sister-host script/frame insertion");
+  assert(profile.pageRules.chapter.blockedUrlTokens.includes("wbbcd=1246039"), "chapter rules should include final wbbcd loader token");
   assert(profile.pageRules.chapter.adBootstrapScriptUrls.some((url) => url.includes("withagecomeswisdom.live")), "chapter rules should include withage config endpoint");
   assert(profile.pageRules.chapter.offsiteNavigationDenyHosts.includes("clicks.pipaffiliates.com"), "chapter rules should deny affiliate click hosts");
   assert(profile.pageRules.chapter.affiliateHintHosts.includes("s.shopee.co.th"), "chapter rules should remove affiliate resource hints");

@@ -130,6 +130,7 @@ Confirmed chapter ad bootstrap blocking now happens before most DOM cleanup:
 
 - static DNR blocks `yougetwhatyoupayfor.net/popup/popup-v4.js`, `yougetwhatyoupayfor.net/6b19cf019d81.js`, `cdnpf.com/6976e0119fd94812e8e10262.js`, `acscdn.com/script/banner.js`, `acscdn.com/script/suv5.js`, `clammyendearedkeg.com/bn.js`, and `nn.coolishrocked.com/tnGqcEziwRRAkNS/126819`
 - static DNR also blocks `yougetwhatyoupayfor.net/banners-web/mangakakalot.gg.js`, `chubbyexemplaryhardiness.com/on.js`, `chubbyexemplaryhardiness.com/get/2090108`, `oundhertobeconsist.org/floater`, the campaign URL `d3jzhqnvnvdy34.cloudfront.net/?qhzjd=1246039`, and the final loader `d2dxy39sqorbhv.cloudfront.net/?syxdd=1257018`
+- static DNR also blocks the later `weiledsteverm.org` product/open chain and any Mangakakalot-initiated request URL carrying the stable loader token `wbbcd=1246039`
 - static DNR blocks exact first-party ad loaders `/js/ads/fly_e2c6a9cb8f6900e4bea0b82766581355.js`, `/js/ads/clck-adu-kklgg.js`, and `/js/ads/admaven.js`
 - static DNR blocks sync/user-sync iframe traffic to `sync.adkernel.com` and `cpm.pressize.com`
 - content cleanup removes matching script tags if they are inserted anyway
@@ -160,7 +161,10 @@ The final affiliate-tab bypass is handled with a chapter-page default-deny polic
 - DNR rule `12` blocks the remaining `chubbyexemplaryhardiness.com` chain across `main_frame`, `sub_frame`, `script`, `xmlhttprequest`, `ping`, and `other`, including `/get/2090108` and `/on.js`.
 - DNR rule `13` blocks the ad-stack config endpoint `withagecomeswisdom.live/api/ads/get-info/v2`.
 - DNR rule `14` blocks top-level navigation to `||chubbyexemplaryhardiness.com/get/2090108` even if a popup loses its Mangakakalot initiator.
-- The MAIN-world page guard also denies dynamic `script` and `iframe` source insertion for `chubbyexemplaryhardiness.com`, `oundhertobeconsist.org`, `withagecomeswisdom.live`, and `d2dxy39sqorbhv.cloudfront.net` through `createElement`, `setAttribute("src", ...)`, `script.src`, `iframe.src`, `appendChild`, and `insertBefore`.
+- DNR rule `15` blocks the surviving `weiledsteverm.org` chain across `main_frame`, `sub_frame`, `script`, `xmlhttprequest`, `ping`, and `other`.
+- DNR rule `16` blocks the stable `wbbcd=1246039` loader token across script/frame/request resource types without depending on the host path.
+- DNR rule `17` blocks top-level navigation to `||weiledsteverm.org` even if a popup/new tab loses the Mangakakalot initiator.
+- The MAIN-world page guard also denies dynamic `script` and `iframe` source insertion for `chubbyexemplaryhardiness.com`, `oundhertobeconsist.org`, `withagecomeswisdom.live`, `weiledsteverm.org`, `ghabovethec.info`, and `d2dxy39sqorbhv.cloudfront.net` through `createElement`, `setAttribute("src", ...)`, `script.src`, `iframe.src`, `appendChild`, and `insertBefore`.
 - Runtime content scripts are registered with `allFrames: true` and `matchOriginAsFallback: true`, so same-origin and inherited-origin frames created from Mangakakalot receive the same popup and dynamic-source guards.
 
 ## Runtime Model

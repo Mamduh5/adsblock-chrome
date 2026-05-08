@@ -318,5 +318,65 @@
         "main_frame"
       ]
     }
+  },
+  {
+    "id": 15,
+    "priority": 30,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "requestDomains": [
+        "weiledsteverm.org"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 16,
+    "priority": 30,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "initiatorDomains": [
+        "mangakakalot.gg",
+        "www.mangakakalot.gg"
+      ],
+      "regexFilter": "^https?://[^#]*[?&]wbbcd=1246039([&#]|$)",
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "script",
+        "xmlhttprequest",
+        "ping",
+        "image",
+        "other"
+      ]
+    }
+  },
+  {
+    "id": 17,
+    "priority": 35,
+    "action": {
+      "type": "block"
+    },
+    "condition": {
+      "urlFilter": "||weiledsteverm.org",
+      "resourceTypes": [
+        "main_frame"
+      ]
+    }
   }
 ]

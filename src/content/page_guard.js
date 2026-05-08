@@ -312,13 +312,14 @@
     const url = clickable ? clickable.getAttribute("href") || clickable.getAttribute("data-href") || clickable.getAttribute("data-url") || "" : "";
     const junk = url && isPageJunkUrl(activeProfile, url);
     const floater = url && isFloaterUrl(url);
+    const wbbcdLoader = url && isWbbcdLoaderUrl(activeProfile, url);
     const affiliate = url && isAffiliateNavigationUrl(activeProfile, url);
     const offsite = url && isOffsiteUrl(activeProfile, url);
     const readerClick = Boolean(rules.shieldPlainReaderClicks && isInsideReaderArea(rules, target));
     const plainChapterClick = Boolean(rules.shieldPlainChapterClicks && !url);
     const largeSurface = isLargeClickSurface(target);
 
-    if (!junk && !floater && !affiliate && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
+    if (!junk && !floater && !wbbcdLoader && !affiliate && !offsite && !readerClick && !plainChapterClick && !largeSurface) {
       return;
     }
 
@@ -339,8 +340,9 @@
         afterMutationBurst: isAfterMutationBurst(activeProfile),
         url: String(url || ""),
         host: url ? getUrlHost(url) : "",
-        reason: floater ? "floater_anchor" : affiliate ? "affiliate_host" : junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
+        reason: floater ? "floater_anchor" : wbbcdLoader ? "wbbcd_loader" : affiliate ? "affiliate_host" : junk ? "junk_domain" : offsite ? "offsite_click" : readerClick ? "reader_delegated_click" : plainChapterClick ? "chapter_plain_click" : "large_click_surface",
         affiliateHost: affiliate,
+        wbbcdLoader,
         target: describeElement(target)
       }
     }));
@@ -607,7 +609,7 @@
 
   function shouldBlockNavigation(activeProfile, url) {
     const pageType = detectPageType(activeProfile);
-    if (isFloaterUrl(url) || isSuspiciousUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url)) {
+    if (isFloaterUrl(url) || isBlockedUrlToken(activeProfile, url) || isSuspiciousUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url)) {
       return true;
     }
     if (pageType !== "chapter") {
@@ -618,7 +620,7 @@
   }
 
   function shouldBlockRequestUrl(activeProfile, url) {
-    return isFloaterUrl(url) || isAffiliateNavigationUrl(activeProfile, url);
+    return isFloaterUrl(url) || isBlockedUrlToken(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url);
   }
 
   function isGuardedMediaElement(node) {
@@ -640,6 +642,7 @@
     const deniedHosts = (rules.dynamicElementDenyHosts || []).concat(rules.offsiteNavigationDenyHosts || []);
     return deniedHosts.some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost))
       || isFloaterUrl(rawUrl)
+      || isBlockedUrlToken(activeProfile, rawUrl)
       || isAffiliateNavigationUrl(activeProfile, rawUrl);
   }
 
@@ -686,6 +689,9 @@
     const host = getUrlHost(url);
     const blankPopup = source === "window_open" && isBlockedBlankPopup(activeProfile, url);
     const floater = isFloaterUrl(url);
+    const wbbcdLoader = isWbbcdLoaderUrl(activeProfile, url);
+    const weiledsteverm = isWeiledstevermUrl(url);
+    const openedProductChain = isOpenedProductChainUrl(activeProfile, url);
     const affiliateHost = isAffiliateNavigationUrl(activeProfile, url);
     const offsite = Boolean(host && !profiles.profileMatchesHostname(activeProfile, host));
     const sameOrigin = Boolean(host && profiles.profileMatchesHostname(activeProfile, host));
@@ -693,12 +699,15 @@
       host,
       blankPopup,
       floater,
+      wbbcdLoader,
+      weiledsteverm,
+      openedProductChain,
       affiliateHost,
       offsite,
       sameOrigin,
       popupDefaultDenied: source === "window_open" && isChapterContext(activeProfile),
       frameContext: window.top !== window,
-      reason: blankPopup ? "blank_popup" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "popup_default_deny",
+      reason: blankPopup ? "blank_popup" : wbbcdLoader ? "wbbcd_loader" : weiledsteverm ? "weiledsteverm" : floater ? "floater" : affiliateHost ? "affiliate_host" : offsite ? "offsite_top_navigation" : "popup_default_deny",
       rawArgs: [
         trimArg(url),
         trimArg(target),
@@ -844,7 +853,39 @@
     return Boolean(parsed && parsed.hostname === "withagecomeswisdom.live" && /^\/api\/ads\/get-info\/v2(?:\/|$)/i.test(parsed.pathname));
   }
 
+  function isWeiledstevermUrl(url) {
+    const parsed = parseUrl(url);
+    return Boolean(parsed && parsed.hostname === "weiledsteverm.org");
+  }
+
+  function isWbbcdLoaderUrl(activeProfile, url) {
+    const parsed = parseUrl(url);
+    if (!parsed) {
+      return false;
+    }
+    if (parsed.searchParams.get("wbbcd") === "1246039") {
+      return true;
+    }
+    return isBlockedUrlToken(activeProfile, parsed.href);
+  }
+
+  function isBlockedUrlToken(activeProfile, url) {
+    const rawUrl = String(url || "");
+    if (!rawUrl) {
+      return false;
+    }
+    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
+      || activeProfile.pageRules && activeProfile.pageRules.chapter
+      || {};
+    return (rules.blockedUrlTokens || []).some((token) => rawUrl.toLowerCase().includes(String(token || "").toLowerCase()));
+  }
+
+  function isOpenedProductChainUrl(activeProfile, url) {
+    return isWeiledstevermUrl(url) || isWbbcdLoaderUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url);
+  }
+
   function dispatchRequestBlocked(activeProfile, source, url) {
+    const openedProductChain = isOpenedProductChainUrl(activeProfile, url);
     window.dispatchEvent(new CustomEvent("site-shield-floater-blocked", {
       detail: {
         profileId: activeProfile.id,
@@ -857,6 +898,10 @@
         chubbyGet: isChubbyGetUrl(url),
         chubbyOnJs: isChubbyOnJsUrl(url),
         withageConfig: isWithageConfigUrl(url),
+        weiledsteverm: isWeiledstevermUrl(url),
+        wbbcdLoader: isWbbcdLoaderUrl(activeProfile, url),
+        openedProductChain,
+        newWindowPixel: openedProductChain && (source === "fetch" || source === "xhr" || source === "beacon"),
         frameContext: window.top !== window,
         clickCount: shieldState.clickCount,
         clickSerial: shieldState.clickSerial,
@@ -866,6 +911,7 @@
   }
 
   function dispatchDynamicSrcDenied(activeProfile, tag, url, source) {
+    const openedProductChain = isOpenedProductChainUrl(activeProfile, url);
     window.dispatchEvent(new CustomEvent("site-shield-dynamic-src-blocked", {
       detail: {
         profileId: activeProfile.id,
@@ -877,6 +923,10 @@
         chubbyGet: isChubbyGetUrl(url),
         chubbyOnJs: isChubbyOnJsUrl(url),
         withageConfig: isWithageConfigUrl(url),
+        weiledsteverm: isWeiledstevermUrl(url),
+        wbbcdLoader: isWbbcdLoaderUrl(activeProfile, url),
+        openedProductChain,
+        newWindowPixel: false,
         frameContext: window.top !== window,
         pageType: detectPageType(activeProfile)
       }

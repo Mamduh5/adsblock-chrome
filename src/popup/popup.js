@@ -338,6 +338,16 @@
       + " chubby on.js, "
       + String(perf.withageConfigBlocked || 0)
       + " withage config, "
+      + String(perf.weiledstevermBlocked || 0)
+      + " weiled hits, "
+      + String(perf.wbbcdLoaderBlocked || 0)
+      + " wbbcd loaders, "
+      + String(perf.openedProductChainBlocked || 0)
+      + " product chains, "
+      + String(perf.newWindowPixelBlocked || 0)
+      + " new-window pixels, "
+      + String(perf.residualFramePopupBlocked || 0)
+      + " residual frame popups, "
       + String(perf.badScriptSrcDenied || 0)
       + " script src denied, "
       + String(perf.badIframeSrcDenied || 0)
