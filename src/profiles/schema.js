@@ -101,7 +101,9 @@
     const normalized = {};
     for (const [pageType, rules] of Object.entries(pageTypes || {})) {
       normalized[pageType] = {
-        pathRegex: String(rules && rules.pathRegex || "")
+        pathRegex: String(rules && rules.pathRegex || ""),
+        domAnySelectors: normalizeList(rules && rules.domAnySelectors || []),
+        domAllSelectors: normalizeList(rules && rules.domAllSelectors || [])
       };
     }
     return normalized;

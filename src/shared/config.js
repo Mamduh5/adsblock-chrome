@@ -6,7 +6,7 @@
     DYNAMIC_RULE_ID_BASE: 10000,
     DYNAMIC_RULE_PROFILE_STRIDE: 1000,
     MAX_CUSTOM_HOST_RULES_PER_PROFILE: 250,
-    DEFAULT_ACTIVATED_PROFILE_IDS: ["mangakakalot"],
+    DEFAULT_ACTIVATED_PROFILE_IDS: ["mangakakalot", "mamtpo"],
     STORAGE_SETTINGS_KEY: "siteShieldSettings",
     SESSION_STATS_KEY: "siteShieldSessionStats",
     RECENT_EVENTS_KEY: "siteShieldRecentEvents",
@@ -21,6 +21,7 @@
     PROFILE_RUNTIME_FILES: [
       "src/profiles/schema.js",
       "src/profiles/sites/mangakakalot.js",
+      "src/profiles/sites/mamtpo.js",
       "src/profiles/index.js",
       "src/shared/config.js",
       "src/shared/heuristics.js"

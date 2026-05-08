@@ -4,7 +4,12 @@ const vm = require("vm");
 const assert = require("assert");
 
 const root = path.resolve(__dirname, "..");
-const grantedOrigins = new Set(["*://mangakakalot.gg/*", "*://www.mangakakalot.gg/*"]);
+const grantedOrigins = new Set([
+  "*://mangakakalot.gg/*",
+  "*://www.mangakakalot.gg/*",
+  "*://mamtpo.com/*",
+  "*://www.mamtpo.com/*"
+]);
 const storageLocal = {};
 const storageSession = {};
 let registeredScripts = [];
@@ -103,9 +108,25 @@ vm.runInContext(
 (async () => {
   const internals = context.SiteShieldBackgroundInternals;
   const profile = context.SiteShieldProfiles.getById("mangakakalot");
+  const mamtpoProfile = context.SiteShieldProfiles.getById("mamtpo");
   const staticRules = JSON.parse(fs.readFileSync(path.join(root, "rules/static_rules.json"), "utf8"));
 
   assert(profile, "Mangakakalot profile should be registered");
+  assert(mamtpoProfile, "Mamtpo profile should be registered");
+  assert(mamtpoProfile.pageTypes.home, "Mamtpo profile should define home page type");
+  assert(mamtpoProfile.pageTypes.watch, "Mamtpo profile should define watch page type");
+  assert(mamtpoProfile.pageTypes.watch.domAnySelectors.includes("#asplayer"), "Mamtpo watch type should detect asplayer DOM");
+  assert(mamtpoProfile.pageTypes.watch.domAnySelectors.includes("#main-player"), "Mamtpo watch type should detect main player DOM");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#custom-promo-popup-overlay"), "Mamtpo watch rules should remove promo popup");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#first-gate"), "Mamtpo watch rules should remove first gate");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#ad-overlay.click-overlay"), "Mamtpo watch rules should remove click overlay");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes("#sticky-banner-center"), "Mamtpo watch rules should remove sticky banner");
+  assert(mamtpoProfile.pageRules.watch.hardDomSelectors.includes(".side-skyscraper"), "Mamtpo watch rules should remove side skyscrapers");
+  assert(mamtpoProfile.pageRules.watch.protectedSelectors.includes("#main-player"), "Mamtpo watch rules should protect main player");
+  assert(mamtpoProfile.pageRules.watch.protectedSelectors.includes("#main-player iframe[src*='mee18player.com/play/' i]"), "Mamtpo watch rules should protect mee18player iframe");
+  assert(mamtpoProfile.exactCookieNames.includes("hide_promo_1111"), "Mamtpo profile should include exact promo popup cookie");
+  assert(mamtpoProfile.hardBlockHosts.includes("t.ly"), "Mamtpo profile should block t.ly CTA host");
+  assert(mamtpoProfile.hardBlockHosts.includes("ibit.ly"), "Mamtpo profile should block ibit.ly CTA host");
   assert(profile.pageTypes.chapter, "Mangakakalot profile should define chapter page type");
   assert(profile.pageRules.chapter.hardBlockHosts.includes("seonetwork.net"), "chapter rules should include confirmed junk host");
   assert(profile.pageRules.chapter.hardBlockHosts.includes("xml.oherbuttheds.com"), "chapter rules should include exact popup host");
@@ -169,14 +190,23 @@ vm.runInContext(
   assert.strictEqual(profile.pageRules.chapter.safeNavigateFirstPartyAnchors, true, "chapter shield should safe-navigate first-party anchors");
   assert(profile.pageRules.chapter.orphanTextTerms.includes("content notification"), "chapter rules should include content notification cleanup");
   assert.strictEqual(await internals.hasProfileHostPermission(profile), true, "permission should be detected");
+  assert.strictEqual(await internals.hasProfileHostPermission(mamtpoProfile), true, "Mamtpo permission should be detected");
 
   const activated = await internals.activateProfile("mangakakalot", false);
   assert.strictEqual(activated.activated, true, "profile should activate");
+  const mamtpoActivated = await internals.activateProfile("mamtpo", false);
+  assert.strictEqual(mamtpoActivated.activated, true, "Mamtpo profile should activate");
 
   const contentScript = registeredScripts.find((script) => script.id === "site-shield-content-mangakakalot");
   const pageGuard = registeredScripts.find((script) => script.id === "site-shield-page-guard-mangakakalot");
+  const mamtpoContentScript = registeredScripts.find((script) => script.id === "site-shield-content-mamtpo");
+  const mamtpoPageGuard = registeredScripts.find((script) => script.id === "site-shield-page-guard-mamtpo");
   assert(contentScript, "isolated content script should register");
   assert(pageGuard, "page guard should register");
+  assert(mamtpoContentScript, "Mamtpo isolated content script should register");
+  assert(mamtpoPageGuard, "Mamtpo page guard should register");
+  assert(mamtpoContentScript.matches.includes("*://mamtpo.com/*"), "Mamtpo content script should match root host");
+  assert(mamtpoContentScript.matches.includes("*://www.mamtpo.com/*"), "Mamtpo content script should match www host");
   assert.strictEqual(pageGuard.world, "MAIN", "page guard must run in MAIN world");
   assert(pageGuard.runAt === "document_start", "page guard should run at document_start");
   assert.strictEqual(pageGuard.allFrames, true, "page guard should run in all frames");
@@ -189,6 +219,7 @@ vm.runInContext(
   assert(Array.isArray(snapshot.profileTuningSummary.candidateBlockHosts), "snapshot should include candidate hosts");
 
   await internals.deactivateProfile("mangakakalot");
+  await internals.deactivateProfile("mamtpo");
   assert.strictEqual(registeredScripts.length, 0, "deactivation should unregister managed scripts");
   assert.strictEqual(dynamicRules.length, 0, "deactivation should remove stale managed dynamic rules");
 

@@ -1,6 +1,7 @@
 importScripts(
   "../profiles/schema.js",
   "../profiles/sites/mangakakalot.js",
+  "../profiles/sites/mamtpo.js",
   "../profiles/index.js",
   "../shared/config.js",
   "../shared/heuristics.js"
@@ -88,7 +89,14 @@ const perfCounters = {
   undefinedIframeRemoved: 0,
   admavenOrClckLoaderBlocked: 0,
   rearmedHijackAttemptsBlocked: 0,
-  expensiveScansSkipped: 0
+  expensiveScansSkipped: 0,
+  promoPopupRemoved: 0,
+  firstGateRemoved: 0,
+  prerollOverlayDisabled: 0,
+  stickyBannerRemoved: 0,
+  sideBannerRemoved: 0,
+  mainPlayerPreserved: 0,
+  watchPageDetected: 0
 };
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -1065,7 +1073,14 @@ function mergePerfCounters(delta) {
     "undefinedIframeRemoved",
     "admavenOrClckLoaderBlocked",
     "rearmedHijackAttemptsBlocked",
-    "expensiveScansSkipped"
+    "expensiveScansSkipped",
+    "promoPopupRemoved",
+    "firstGateRemoved",
+    "prerollOverlayDisabled",
+    "stickyBannerRemoved",
+    "sideBannerRemoved",
+    "mainPlayerPreserved",
+    "watchPageDetected"
   ]) {
     perfCounters[key] += Number(delta[key] || 0);
   }

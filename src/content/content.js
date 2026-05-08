@@ -91,12 +91,21 @@
       undefinedIframeRemoved: 0,
       admavenOrClckLoaderBlocked: 0,
       rearmedHijackAttemptsBlocked: 0,
-      expensiveScansSkipped: 0
+      expensiveScansSkipped: 0,
+      promoPopupRemoved: 0,
+      firstGateRemoved: 0,
+      prerollOverlayDisabled: 0,
+      stickyBannerRemoved: 0,
+      sideBannerRemoved: 0,
+      mainPlayerPreserved: 0,
+      watchPageDetected: 0
     },
     perfTimer: null,
     chapterClickCount: 0,
     lastMutationTime: 0,
-    pageGuardListenerInstalled: false
+    pageGuardListenerInstalled: false,
+    watchPageDetectedRecorded: false,
+    mainPlayerPreservedRecorded: false
   };
 
   if (state.profile) {
@@ -125,6 +134,7 @@
     tryScrubStorage("localStorage");
     tryScrubStorage("sessionStorage");
     installClickInterceptor();
+    installMamtpoClickInterceptor();
     installMutationObserver();
     installChapterRearmWatchers();
     queueCleanup(document.documentElement, true);
@@ -395,6 +405,70 @@
     }, true);
   }
 
+  function installMamtpoClickInterceptor() {
+    if (!state.profile || state.profile.id !== "mamtpo") {
+      return;
+    }
+
+    for (const eventName of ["pointerdown", "mousedown", "click", "auxclick"]) {
+      document.addEventListener(eventName, (event) => {
+        if (!state.enabled) {
+          return;
+        }
+        const target = event.target instanceof Element ? event.target : null;
+        if (!target || isMamtpoProtectedNode(target)) {
+          return;
+        }
+
+        const blockedSurface = target.closest([
+          "#custom-promo-popup-overlay",
+          ".custom-popup-content",
+          "#first-gate",
+          "#close-gate",
+          "#cta-stack",
+          "#a-regis",
+          "#btn-skip",
+          "#btn-next",
+          "#ad-overlay.click-overlay",
+          ".click-overlay",
+          ".bcm-ads",
+          "#sticky-banner-center",
+          ".dual-banner-wrapper",
+          ".side-skyscraper",
+          ".side-left",
+          ".side-right",
+          ".wbnn",
+          ".promo-banner",
+          "div.ad-float"
+        ].join(","));
+        const actionable = target.closest("a[href], button, [role='button'], [onclick], [data-href], [data-url]");
+        const url = actionable
+          ? actionable.getAttribute("href") || actionable.getAttribute("data-href") || actionable.getAttribute("data-url") || ""
+          : "";
+
+        if (!blockedSurface && !isMamtpoAffiliateUrl(url)) {
+          return;
+        }
+
+        stopEvent(event);
+        incrementStats({ blockedRedirects: 1 });
+        addPerfDelta({
+          clicksShielded: 1,
+          prerollOverlayDisabled: blockedSurface && blockedSurface.matches("#ad-overlay, .click-overlay, #cta-stack, #a-regis, #btn-skip, #btn-next") ? 1 : 0
+        });
+        recordEvent(config.EVENT_CATEGORIES.CLICK, "Mamtpo ad click surface blocked", {
+          action: "block",
+          pageType: state.pageType,
+          eventType: event.type,
+          url,
+          host: heuristics.getUrlHostname(url, location.href),
+          target: describeNode(target),
+          surface: blockedSurface ? describeNode(blockedSurface) : ""
+        });
+      }, true);
+    }
+  }
+
   function installMutationObserver() {
     const root = document.documentElement || document;
     state.observer = new MutationObserver((mutations) => {
@@ -529,6 +603,8 @@
       return;
     }
 
+    refreshPageTypeFromDom();
+
     const roots = state.pendingFullScan
       ? [document.documentElement]
       : Array.from(state.pendingRoots).filter((root) => root.isConnected);
@@ -550,6 +626,9 @@
       removed += removeStableChapterAdContainers(roots);
       removed += removeReaderInjectedAdBlocks(roots);
     }
+    if (isMamtpoWatchPage()) {
+      removed += cleanupMamtpoWatchPage(roots);
+    }
     removed += removeBySelectors(roots);
     removed += removeSuspiciousIframes(roots);
     removed += removeOverlayCandidates(roots);
@@ -568,6 +647,267 @@
       incrementStats({ removedOverlays: removed });
     }
     flushPerfSoon();
+  }
+
+  function refreshPageTypeFromDom() {
+    const detected = detectPageType(state.profile);
+    if (detected && detected !== "unknown" && detected !== state.pageType) {
+      state.pageType = detected;
+      state.pageRules = state.profile.pageRules && state.profile.pageRules[state.pageType] || {};
+    }
+    if (isMamtpoWatchPage()) {
+      recordWatchPageDetected();
+    }
+  }
+
+  function isMamtpoWatchPage() {
+    return state.profile && state.profile.id === "mamtpo" && state.pageType === "watch";
+  }
+
+  function recordWatchPageDetected() {
+    if (state.watchPageDetectedRecorded) {
+      return;
+    }
+    state.watchPageDetectedRecorded = true;
+    addPerfDelta({ watchPageDetected: 1 });
+    recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo watch page detected", {
+      action: "observe",
+      pageType: state.pageType,
+      hasAsplayer: Boolean(document.querySelector("#asplayer")),
+      hasMainPlayer: Boolean(document.querySelector("#main-player")),
+      hasMee18Frame: Boolean(document.querySelector("#main-player iframe[src*='mee18player.com/play/' i]"))
+    });
+  }
+
+  function cleanupMamtpoWatchPage(roots) {
+    expirePageCookie("hide_promo_1111");
+
+    let removed = 0;
+    removed += removeMamtpoSelectorGroup(roots, [
+      "#custom-promo-popup-overlay",
+      ".custom-popup-content",
+      "#custom-popup-close"
+    ], "mamtpo-promo-popup", { promoPopupRemoved: 1 });
+    removed += removeMamtpoSelectorGroup(roots, [
+      "#first-gate",
+      "#close-gate"
+    ], "mamtpo-first-gate", { firstGateRemoved: 1 });
+    removed += removeMamtpoSelectorGroup(roots, [
+      "#cta-stack",
+      "#a-regis",
+      "#btn-skip",
+      "#btn-next",
+      "#ad-overlay.click-overlay",
+      ".click-overlay",
+      "#as_video"
+    ], "mamtpo-preroll-overlay", { prerollOverlayDisabled: 1 });
+    removed += removeMamtpoSelectorGroup(roots, [
+      ".bcm-ads",
+      "#sticky-banner-center",
+      "#close-banner",
+      ".dual-banner-wrapper"
+    ], "mamtpo-sticky-banner", { stickyBannerRemoved: 1 });
+    removed += removeMamtpoSelectorGroup(roots, [
+      ".player-layout-main-wrapper > .side-skyscraper",
+      ".side-skyscraper",
+      ".side-left",
+      ".side-right",
+      ".wbnn",
+      ".promo-banner",
+      "div.ad-float",
+      ".ad-close",
+      ".promo-close"
+    ], "mamtpo-side-banner", { sideBannerRemoved: 1 });
+    removed += removeMamtpoAffiliateImageBlocks();
+    preserveMamtpoMainPlayer();
+    return removed;
+  }
+
+  function removeMamtpoSelectorGroup(roots, selectors, reason, counterDelta) {
+    const selector = heuristics.safeSelectorList(selectors).join(",");
+    if (!selector) {
+      return 0;
+    }
+
+    let removed = 0;
+    for (const node of queryWithinRoots(roots, selector, 100)) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || isMamtpoProtectedNode(node)) {
+        continue;
+      }
+      removeNode(node, reason, {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(node)
+      });
+      removed += 1;
+    }
+
+    if (removed > 0) {
+      const delta = {};
+      for (const [key, value] of Object.entries(counterDelta || {})) {
+        delta[key] = Number(value || 0) * removed;
+      }
+      addPerfDelta(delta);
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo watch UI removed", {
+        action: "block",
+        pageType: state.pageType,
+        reason,
+        count: removed
+      });
+    }
+    return removed;
+  }
+
+  function removeMamtpoAffiliateImageBlocks() {
+    const player = document.querySelector("#main-player");
+    if (!player) {
+      return 0;
+    }
+
+    const candidates = new Set();
+    collectMamtpoPlayerSiblings(player, candidates);
+    for (const image of document.querySelectorAll("a[href] > img")) {
+      const anchor = image.closest("a[href]");
+      if (!anchor || !isMamtpoAffiliateUrl(anchor.getAttribute("href") || "")) {
+        continue;
+      }
+      const target = closestMamtpoBannerContainer(anchor);
+      if (target) {
+        candidates.add(target);
+      }
+    }
+
+    let removed = 0;
+    for (const node of candidates) {
+      if (!(node instanceof HTMLElement) || state.removedNodes.has(node) || isMamtpoProtectedNode(node) || !isMamtpoAffiliateBannerNode(node)) {
+        continue;
+      }
+      removeNode(node, "mamtpo-affiliate-image-banner", {
+        action: "block",
+        pageType: state.pageType,
+        node: describeNode(node)
+      });
+      removed += 1;
+    }
+    if (removed > 0) {
+      addPerfDelta({ sideBannerRemoved: removed });
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo affiliate image banner removed", {
+        action: "block",
+        pageType: state.pageType,
+        count: removed
+      });
+    }
+    return removed;
+  }
+
+  function collectMamtpoPlayerSiblings(player, candidates) {
+    const parent = player.parentElement;
+    if (!parent) {
+      return;
+    }
+    for (const direction of ["previousElementSibling", "nextElementSibling"]) {
+      let current = player[direction];
+      let depth = 0;
+      while (current instanceof HTMLElement && depth < 4) {
+        candidates.add(current);
+        current = current[direction];
+        depth += 1;
+      }
+    }
+  }
+
+  function closestMamtpoBannerContainer(node) {
+    let current = node instanceof HTMLElement ? node : null;
+    let depth = 0;
+    while (current && current !== document.body && depth < 4) {
+      if (isMamtpoProtectedNode(current)) {
+        return null;
+      }
+      if (/^(p|div|section|figure|aside)$/i.test(current.tagName)) {
+        return current;
+      }
+      current = current.parentElement;
+      depth += 1;
+    }
+    return node instanceof HTMLElement ? node : null;
+  }
+
+  function isMamtpoAffiliateBannerNode(node) {
+    if (!(node instanceof HTMLElement) || isMamtpoProtectedNode(node)) {
+      return false;
+    }
+    if (node.querySelector("iframe, video, canvas, #asplayer, #main-player")) {
+      return false;
+    }
+    const anchors = Array.from(node.querySelectorAll("a[href]"));
+    const images = node.querySelectorAll("img");
+    if (!anchors.length || !images.length) {
+      return false;
+    }
+    const hasAffiliateLink = anchors.some((anchor) => isMamtpoAffiliateUrl(anchor.getAttribute("href") || ""));
+    const namedAd = /(^|[-_\s])(ad|ads|advert|affiliate|banner|promo|sponsor|wbnn)([-_\s]|$)/i.test(node.id + " " + node.className);
+    const text = trimText(node.textContent);
+    return text.length <= 160 && (hasAffiliateLink || namedAd);
+  }
+
+  function preserveMamtpoMainPlayer() {
+    const player = document.querySelector("#main-player");
+    if (!(player instanceof HTMLElement)) {
+      return;
+    }
+
+    revealMamtpoPlayerElement(player);
+    for (const frame of player.querySelectorAll("iframe")) {
+      if (frame instanceof HTMLElement) {
+        revealMamtpoPlayerElement(frame);
+      }
+    }
+
+    if (!state.mainPlayerPreservedRecorded) {
+      state.mainPlayerPreservedRecorded = true;
+      addPerfDelta({ mainPlayerPreserved: 1 });
+      recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo main player preserved", {
+        action: "observe",
+        pageType: state.pageType,
+        hasIframe: Boolean(player.querySelector("iframe")),
+        hasMee18Frame: Boolean(player.querySelector("iframe[src*='mee18player.com/play/' i]"))
+      });
+    }
+  }
+
+  function revealMamtpoPlayerElement(node) {
+    node.removeAttribute("hidden");
+    node.removeAttribute("aria-hidden");
+    node.removeAttribute("data-site-shield-hidden");
+    node.style.display = node.tagName === "IFRAME" ? "block" : "block";
+    node.style.visibility = "visible";
+    node.style.opacity = "1";
+    node.style.pointerEvents = "auto";
+  }
+
+  function isMamtpoProtectedNode(node) {
+    if (!(node instanceof Element)) {
+      return false;
+    }
+    if (node.matches("#main-player") || node.closest("#main-player")) {
+      return true;
+    }
+    return Boolean(node.querySelector && node.querySelector("#main-player, iframe[src*='mee18player.com/play/' i]"));
+  }
+
+  function isMamtpoAffiliateUrl(url) {
+    const host = heuristics.getUrlHostname(url, location.href);
+    return host === "t.ly" || host.endsWith(".t.ly") || host === "ibit.ly" || host.endsWith(".ibit.ly");
+  }
+
+  function expirePageCookie(name) {
+    try {
+      const encodedName = encodeURIComponent(name);
+      document.cookie = encodedName + "=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/";
+      document.cookie = encodedName + "=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; domain=." + location.hostname.replace(/^www\./i, "");
+    } catch (error) {
+      debugLog("cookie-expire-failed", { name, error: String(error) });
+    }
   }
 
   function removeBySelectors(roots) {
@@ -2191,7 +2531,14 @@
         undefinedIframeRemoved: 0,
         admavenOrClckLoaderBlocked: 0,
         rearmedHijackAttemptsBlocked: 0,
-        expensiveScansSkipped: 0
+        expensiveScansSkipped: 0,
+        promoPopupRemoved: 0,
+        firstGateRemoved: 0,
+        prerollOverlayDisabled: 0,
+        stickyBannerRemoved: 0,
+        sideBannerRemoved: 0,
+        mainPlayerPreserved: 0,
+        watchPageDetected: 0
       };
       if (Object.values(delta).some((value) => Number(value || 0) > 0)) {
         chrome.runtime.sendMessage({ type: "recordPerf", profileId: state.profile.id, delta });
@@ -2383,18 +2730,51 @@
     const pathname = resolveFramePathname();
     const pageTypes = profile && profile.pageTypes || {};
     for (const [pageType, rule] of Object.entries(pageTypes)) {
-      if (!rule || !rule.pathRegex) {
+      if (!rule) {
         continue;
       }
-      try {
-        if (new RegExp(rule.pathRegex, "i").test(pathname)) {
-          return pageType;
-        }
-      } catch (error) {
-        debugLog("invalid-page-type-regex", { pageType, pattern: rule.pathRegex });
+      if (!pageTypePathMatches(pathname, rule, pageType)) {
+        continue;
       }
+      if (!pageTypeDomMatches(rule)) {
+        continue;
+      }
+      return pageType;
     }
     return "unknown";
+  }
+
+  function pageTypePathMatches(pathname, rule, pageType) {
+    if (!rule.pathRegex) {
+      return true;
+    }
+    try {
+      return new RegExp(rule.pathRegex, "i").test(pathname);
+    } catch (error) {
+      debugLog("invalid-page-type-regex", { pageType, pattern: rule.pathRegex });
+      return false;
+    }
+  }
+
+  function pageTypeDomMatches(rule) {
+    const anySelectors = heuristics.safeSelectorList(rule.domAnySelectors || []);
+    const allSelectors = heuristics.safeSelectorList(rule.domAllSelectors || []);
+    if (anySelectors.length && !anySelectors.some((selector) => safeQuerySelector(selector))) {
+      return false;
+    }
+    if (allSelectors.length && !allSelectors.every((selector) => safeQuerySelector(selector))) {
+      return false;
+    }
+    return true;
+  }
+
+  function safeQuerySelector(selector) {
+    try {
+      return document.querySelector(selector);
+    } catch (error) {
+      debugLog("invalid-page-type-dom-selector", { selector });
+      return null;
+    }
   }
 
   function resolveFrameHostname() {

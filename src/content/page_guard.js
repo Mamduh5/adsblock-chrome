@@ -259,7 +259,7 @@
   function installChapterClickShield(activeProfile) {
     const pageType = detectPageType(activeProfile);
     const rules = activeProfile.pageRules && activeProfile.pageRules[pageType];
-    if (pageType !== "chapter" || !rules || !rules.clickShieldEnabled) {
+    if (!isGuardedContentPageType(pageType) || !rules || !rules.clickShieldEnabled) {
       return;
     }
 
@@ -571,7 +571,7 @@
   }
 
   function isBlockedBlankPopup(activeProfile, url) {
-    if (!isChapterContext(activeProfile)) {
+    if (!isGuardedContentContext(activeProfile)) {
       return false;
     }
     const rawUrl = String(url == null ? "" : url).trim();
@@ -579,11 +579,11 @@
   }
 
   function shouldBlockWindowOpen(activeProfile, url) {
-    if (!isChapterContext(activeProfile)) {
+    if (!isGuardedContentContext(activeProfile)) {
       return isBlockedBlankPopup(activeProfile, url) || shouldBlockNavigation(activeProfile, url);
     }
 
-    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    const rules = activePageRules(activeProfile);
     if (rules.blockPopupOpenByDefault !== false && !isAllowedChapterPopup(activeProfile, url)) {
       return true;
     }
@@ -591,7 +591,7 @@
   }
 
   function isAllowedChapterPopup(activeProfile, url) {
-    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    const rules = activePageRules(activeProfile);
     const allowPaths = rules.popupAllowSameOriginPaths || [];
     if (!allowPaths.length) {
       return false;
@@ -612,10 +612,10 @@
     if (isFloaterUrl(url) || isBlockedUrlToken(activeProfile, url) || isSuspiciousUrl(activeProfile, url) || isAffiliateNavigationUrl(activeProfile, url)) {
       return true;
     }
-    if (pageType !== "chapter") {
+    if (!isGuardedContentPageType(pageType)) {
       return isGuardedClickWindow(activeProfile) && isOffsiteUrl(activeProfile, url);
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules.chapter || {};
+    const rules = activePageRules(activeProfile);
     return Boolean(rules.defaultDenyOffsiteNavigation && isOffsiteUrl(activeProfile, url) && !isExplicitlyAllowedOffsite(activeProfile, url));
   }
 
@@ -636,9 +636,7 @@
     if (!host) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
-      || activeProfile.pageRules && activeProfile.pageRules.chapter
-      || {};
+    const rules = activePageRules(activeProfile);
     const deniedHosts = (rules.dynamicElementDenyHosts || []).concat(rules.offsiteNavigationDenyHosts || []);
     return deniedHosts.some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost))
       || isFloaterUrl(rawUrl)
@@ -667,9 +665,7 @@
     if (!host) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
-      || activeProfile.pageRules && activeProfile.pageRules.chapter
-      || {};
+    const rules = activePageRules(activeProfile);
     return (rules.offsiteNavigationDenyHosts || []).some((denyHost) => heuristics.isSubdomainOrSame(host, denyHost));
   }
 
@@ -678,9 +674,7 @@
     if (!host) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
-      || activeProfile.pageRules && activeProfile.pageRules.chapter
-      || {};
+    const rules = activePageRules(activeProfile);
     return (rules.offsiteNavigationAllowHosts || []).some((allowHost) => heuristics.isSubdomainOrSame(host, allowHost));
   }
 
@@ -874,9 +868,7 @@
     if (!rawUrl) {
       return false;
     }
-    const rules = activeProfile.pageRules && activeProfile.pageRules[detectPageType(activeProfile)]
-      || activeProfile.pageRules && activeProfile.pageRules.chapter
-      || {};
+    const rules = activePageRules(activeProfile);
     return (rules.blockedUrlTokens || []).some((token) => rawUrl.toLowerCase().includes(String(token || "").toLowerCase()));
   }
 
@@ -1023,7 +1015,20 @@
   }
 
   function isChapterContext(activeProfile) {
-    return detectPageType(activeProfile) === "chapter";
+    return isGuardedContentContext(activeProfile);
+  }
+
+  function isGuardedContentContext(activeProfile) {
+    return isGuardedContentPageType(detectPageType(activeProfile));
+  }
+
+  function isGuardedContentPageType(pageType) {
+    return pageType === "chapter" || pageType === "watch";
+  }
+
+  function activePageRules(activeProfile) {
+    const pageType = detectPageType(activeProfile);
+    return activeProfile.pageRules && activeProfile.pageRules[pageType] || {};
   }
 
   function resolveContextHostname() {
