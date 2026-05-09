@@ -110,7 +110,9 @@
       homePopupRemoved: 0,
       homeCenterAffiliateBlockRemoved: 0,
       homePromoImageRemoved: 0,
-      adWrapperRemoved: 0
+      adWrapperRemoved: 0,
+      watchBannerWrapperRemoved: 0,
+      homeBannerWrapperRemoved: 0
     },
     perfTimer: null,
     chapterClickCount: 0,
@@ -746,13 +748,13 @@
       ".ads-all-group",
       ".ads-item",
       ".ads-close-btn"
-    ], "mamtpo-ads-container-main", { adsContainerMainRemoved: 1, adWrapperRemoved: 1 });
+    ], "mamtpo-ads-container-main", { adsContainerMainRemoved: 1, adWrapperRemoved: 1, watchBannerWrapperRemoved: 1 });
     removed += removeMamtpoSelectorGroup(roots, [
       ".bcm-ads",
       "#sticky-banner-center",
       "#close-banner",
       ".dual-banner-wrapper"
-    ], "mamtpo-sticky-banner", { stickyBannerRemoved: 1, adWrapperRemoved: 1 });
+    ], "mamtpo-sticky-banner", { stickyBannerRemoved: 1, adWrapperRemoved: 1, watchBannerWrapperRemoved: 1 });
     removed += removeMamtpoSelectorGroup(roots, [
       ".player-layout-main-wrapper > .side-skyscraper",
       ".side-skyscraper",
@@ -763,7 +765,7 @@
       "div.ad-float",
       ".ad-close",
       ".promo-close"
-    ], "mamtpo-side-banner", { sideBannerRemoved: 1, sideSkyscraperRemoved: 1, adWrapperRemoved: 1 });
+    ], "mamtpo-side-banner", { sideBannerRemoved: 1, sideSkyscraperRemoved: 1, adWrapperRemoved: 1, watchBannerWrapperRemoved: 1 });
     removed += removeMamtpoAffiliateImageBlocks();
     preserveMamtpoMainPlayer();
     return removed;
@@ -780,6 +782,19 @@
       "[id^='close-home-']",
       ".custom-popup-close"
     ], "mamtpo-home-popup", { homePopupRemoved: 1 });
+    removed += removeMamtpoSelectorGroup(roots, [
+      ".ads-container-main",
+      ".ads-side-l",
+      ".ads-side-r",
+      ".ads-bottom-area",
+      ".ads-all-group",
+      ".ads-item",
+      ".ads-close-btn",
+      ".dual-banner-wrapper",
+      ".side-skyscraper",
+      ".side-left",
+      ".side-right"
+    ], "mamtpo-home-banner-wrapper", { homeBannerWrapperRemoved: 1, adWrapperRemoved: 1 });
     removed += removeMamtpoCenterAffiliateBlocks("home");
     removed += removeMamtpoHomePromoImages();
     return removed;
@@ -961,7 +976,7 @@
       if (scope === "home" && !isMamtpoHomeAdCenter(center)) {
         continue;
       }
-      if (scope !== "home" && !isMamtpoNearPlayerArea(center)) {
+      if (scope !== "home" && !isMamtpoWatchAdCenter(center)) {
         continue;
       }
       removeNode(center, "mamtpo-center-affiliate-stack", {
@@ -983,7 +998,7 @@
     if (removed > 0) {
       addPerfDelta(scope === "home"
         ? { homeCenterAffiliateBlockRemoved: removed, adWrapperRemoved: removed }
-        : { centerAffiliateBlockRemoved: removed, watchCenterAffiliateBlockRemoved: removed, adWrapperRemoved: removed });
+        : { centerAffiliateBlockRemoved: removed, watchCenterAffiliateBlockRemoved: removed, adWrapperRemoved: removed, watchBannerWrapperRemoved: removed });
       recordEvent(config.EVENT_CATEGORIES.DOM, "Mamtpo center affiliate stack removed", {
         action: "block",
         pageType: state.pageType,
@@ -1007,8 +1022,9 @@
     const imageCount = node.querySelectorAll("img").length;
     const externalImageLinks = countMamtpoExternalImageLinks(node);
     const knownAffiliateLinks = countMamtpoKnownAffiliateImageLinks(node);
+    const bannerImages = countMamtpoBannerImages(node);
     const text = trimText(node.textContent);
-    return imageCount > 0 && text.length <= 500 && (knownAffiliateLinks > 0 || externalImageLinks >= 2);
+    return imageCount > 0 && text.length <= 500 && (knownAffiliateLinks > 0 || externalImageLinks >= 2 || bannerImages >= 2);
   }
 
   function countMamtpoExternalImageLinks(node) {
@@ -1031,6 +1047,24 @@
     return count;
   }
 
+  function countMamtpoBannerImages(node) {
+    let count = 0;
+    for (const image of node.querySelectorAll("img")) {
+      const src = image.getAttribute("src") || "";
+      const alt = image.getAttribute("alt") || "";
+      const name = [src, alt, image.id || "", typeof image.className === "string" ? image.className : ""].join(" ");
+      const width = Number(image.getAttribute("width") || image.naturalWidth || image.width || 0);
+      const height = Number(image.getAttribute("height") || image.naturalHeight || image.height || 0);
+      const bannerNamed = /banner|promo|ads?|affiliate|bet|casino|slot|ball/i.test(name);
+      const bannerFile = /\.(?:gif|jpe?g|png|webp)(?:[?#]|$)/i.test(src);
+      const bannerShape = width >= 250 && height > 0 && width / Math.max(1, height) >= 2.2;
+      if (bannerNamed || bannerFile && bannerShape || /\.gif(?:[?#]|$)/i.test(src)) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   function isMamtpoHomeAdCenter(node) {
     if (!(node instanceof HTMLElement)) {
       return false;
@@ -1038,7 +1072,23 @@
     if (node.querySelector("article, .post, .post-card, .post-item, h1, h2, h3")) {
       return false;
     }
-    return countMamtpoKnownAffiliateImageLinks(node) > 0 || countMamtpoExternalImageLinks(node) >= 2;
+    return countMamtpoKnownAffiliateImageLinks(node) > 0 || countMamtpoExternalImageLinks(node) >= 2 || countMamtpoBannerImages(node) >= 2;
+  }
+
+  function isMamtpoWatchAdCenter(node) {
+    if (!(node instanceof HTMLElement)) {
+      return false;
+    }
+    if (isMamtpoNearPlayerArea(node)) {
+      return true;
+    }
+    if (!node.closest("article, .entry-header, .entry-content, main, .player-layout-main-wrapper")) {
+      return false;
+    }
+    if (node.querySelector(".related-posts, #comments, [class*='comment' i]")) {
+      return false;
+    }
+    return countMamtpoKnownAffiliateImageLinks(node) > 0 || countMamtpoExternalImageLinks(node) >= 2 || countMamtpoBannerImages(node) >= 2;
   }
 
   function isMamtpoNearPlayerArea(node) {
@@ -1198,7 +1248,8 @@
       "ccx1.net",
       "maryelschool.org",
       "momentcar.com",
-      "bad-ems.info"
+      "bad-ems.info",
+      "googles.video"
     ].some((domain) => host === domain || host.endsWith("." + domain));
   }
 
@@ -2866,7 +2917,9 @@
         homePopupRemoved: 0,
         homeCenterAffiliateBlockRemoved: 0,
         homePromoImageRemoved: 0,
-        adWrapperRemoved: 0
+        adWrapperRemoved: 0,
+        watchBannerWrapperRemoved: 0,
+        homeBannerWrapperRemoved: 0
       };
       if (Object.values(delta).some((value) => Number(value || 0) > 0)) {
         chrome.runtime.sendMessage({ type: "recordPerf", profileId: state.profile.id, delta });

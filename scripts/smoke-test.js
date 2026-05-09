@@ -118,6 +118,9 @@ vm.runInContext(
   assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes("#custom-promo-popup-home-1"), "Mamtpo home rules should remove home popup");
   assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes("[id^='custom-promo-popup-home-']"), "Mamtpo home rules should remove home popup family");
   assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes(".custom-promo-overlay"), "Mamtpo home rules should remove promo overlay");
+  assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes(".ads-container-main"), "Mamtpo home rules should remove ad container wrappers");
+  assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes(".dual-banner-wrapper"), "Mamtpo home rules should remove dual banner wrappers");
+  assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes(".side-skyscraper"), "Mamtpo home rules should remove side skyscraper wrappers");
   assert(mamtpoProfile.pageRules.home.hardDomSelectors.includes("img[src*='ball.gif' i][alt*='promo' i]"), "Mamtpo home rules should remove standalone ball promo image");
   assert(mamtpoProfile.pageRules.home.offsiteNavigationDenyHosts.includes("cutt.ly"), "Mamtpo home rules should include cutt.ly shortener signal");
   assert(mamtpoProfile.pageRules.home.offsiteNavigationDenyHosts.includes("rebrand.ly"), "Mamtpo home rules should include rebrand.ly shortener signal");
